@@ -15,10 +15,16 @@ final class StatusesStore {
     update_option(self::OPT_STATUSES, array_values($statuses), false);
   }
 
-  public function wc_key_from_slug(string $slug): string {
-    $slug = sanitize_key($slug);
-    $slug = ltrim($slug, '-');
-    return 'wc-' . $slug;
+public function wc_key_from_slug(string $slug): string {
+    // 1. Sanitize to strictly lowercase alpha-numeric-dash
+    $clean = preg_replace('/[^a-z0-9-]/', '', strtolower($slug));
+
+    // 2. Remove any accidentally typed 'wc-' prefix to avoid 'wc-wc-something'
+    if (str_starts_with($clean, 'wc-')) {
+        return $clean;
+    }
+
+    return 'wc-' . $clean;
   }
 
   public function sanitize_payload(array $in, ?array $existing = null): array {
