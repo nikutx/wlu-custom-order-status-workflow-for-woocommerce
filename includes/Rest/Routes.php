@@ -11,6 +11,12 @@ if (!defined('ABSPATH')) exit;
 final class Routes {
   private StatusesStore $store;
 
+  // Define Core Slugs to ignore in limits
+  private const CORE_SLUGS = [
+      'wc-pending', 'wc-processing', 'wc-on-hold',
+      'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed'
+  ];
+
   public function __construct(StatusesStore $store) {
     $this->store = $store;
   }
@@ -63,6 +69,7 @@ final class Routes {
       $counts = [];
       $hpos_table = $wpdb->prefix . 'wc_orders';
 
+      // Check for HPOS (High Performance Order Storage)
       if ($wpdb->get_var("SHOW TABLES LIKE '$hpos_table'") === $hpos_table) {
           $results = $wpdb->get_results("SELECT status, COUNT(*) as cnt FROM $hpos_table GROUP BY status", ARRAY_A);
           if ($results) {
@@ -78,6 +85,7 @@ final class Routes {
           }
       }
 
+      // Fallback to Post Meta (Legacy)
       $results = $wpdb->get_results(
           "SELECT post_status, COUNT(*) as cnt
            FROM {$wpdb->posts}
@@ -99,15 +107,19 @@ final class Routes {
   }
 
   public function register(): void {
-    // --- ADDED: Register Workflow Rules Controller ---
-    require_once __DIR__ . '/WorkflowRulesController.php';
-    WorkflowRulesController::register_routes();
 
-    // -------------------------------------------------
-    // --- ADD SETTINGS CONTROLLER ---
+    // Register Sub-Controllers
+    if (file_exists(__DIR__ . '/WorkflowRulesController.php')) {
+        require_once __DIR__ . '/WorkflowRulesController.php';
+        WorkflowRulesController::register_routes();
+    }
+
+    if (file_exists(__DIR__ . '/SettingsController.php')) {
         require_once __DIR__ . '/SettingsController.php';
         SettingsController::register_routes();
-        //
+    }
+
+    // GET /ping
     register_rest_route(Plugin::REST_NS, '/ping', [
       'methods' => 'GET',
       'permission_callback' => fn() => current_user_can('manage_options'),
@@ -140,7 +152,7 @@ final class Routes {
       },
     ]);
 
-    // POST /statuses (create)
+    // POST /statuses (Create or Override)
     register_rest_route(Plugin::REST_NS, '/statuses', [
       'methods' => 'POST',
       'permission_callback' => fn() => $this->can_manage(),
@@ -148,9 +160,25 @@ final class Routes {
         $in = (array)$req->get_json_params();
         $statuses = $this->store->get_all();
 
-        if (count($statuses) >= 2 && !class_exists('WLU_OW_Pro')) {
+        // --- LIMIT CHECK FIX ---
+
+        // 1. Is the incoming status a Core Status?
+        $incomingSlug = $in['slug'] ?? '';
+        $isCoreOverride = in_array($incomingSlug, self::CORE_SLUGS);
+
+        // 2. Count current CUSTOM statuses only (exclude existing core overrides)
+        $customCount = 0;
+        foreach ($statuses as $s) {
+            if (!in_array($s['slug'], self::CORE_SLUGS)) {
+                $customCount++;
+            }
+        }
+
+        // 3. Enforce Limit: Only if creating NEW CUSTOM status and limit reached
+        if (!$isCoreOverride && $customCount >= 2 && !class_exists('WLU_OW_Pro')) {
              return new WP_Error('wlu_pro_limit', 'Free version limit reached (2 statuses). Upgrade to Pro for unlimited workflows!', ['status' => 403]);
         }
+        // -----------------------
 
         $status = $this->store->sanitize_payload($in);
         if (empty($status['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);
@@ -195,7 +223,7 @@ final class Routes {
           $updated['id'] = $id;
           if (empty($updated['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);
 
-          $updated['slug'] = $existing['slug'];
+          $updated['slug'] = $existing['slug']; // Prevent slug changes on update
 
           $statuses[$foundIndex] = $updated;
           $this->store->save_all($statuses);

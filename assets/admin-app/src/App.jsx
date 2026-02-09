@@ -1,16 +1,27 @@
 import { useMemo, useState } from "react";
 import {
     Box,
-    Button,
     Divider,
     List,
     ListItemButton,
     ListItemText,
     Paper,
     Typography,
-    Tooltip
+    Tooltip,
+    IconButton,
+    createTheme,
+    ThemeProvider,
+    CssBaseline,
+    Stack,
+    alpha
 } from "@mui/material";
-import LockIcon from "@mui/icons-material/Lock"; // <--- Import Lock Icon
+
+// --- ICONS ---
+import LockIcon from "@mui/icons-material/Lock";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import BoltIcon from "@mui/icons-material/Bolt";
+import CodeIcon from "@mui/icons-material/Code";
 
 // --- PAGES ---
 import OrderStatusesPage from "./pages/OrderStatuses/OrderStatuses.jsx";
@@ -18,109 +29,215 @@ import WorkflowRulesPage from "./pages/WorkflowRules/WorkflowRules.jsx";
 import SettingsPage from "./pages/Settings/SettingsPage.jsx";
 
 export default function App() {
-    const cfg = window.WLU_OW;
+    // --- 1. DETECT DEV MODE ---
+    const isDev = import.meta.env.DEV;
 
-    // Defined the menu with a new "Locked" item
-    const menu = useMemo(
-        () => [
-            { key: "statuses", label: "Order Statuses" },
-            { key: "workflow", label: "Workflow Rules" },
-            { key: "logs", label: "Activity Logs", locked: true }, // <--- The Ghost Tab
-            { key: "settings", label: "Settings" },
-            { key: "debug", label: "Debug" },
-        ],
-        []
-    );
+    // --- 2. THEME ENGINE ---
+    const [mode, setMode] = useState(() => localStorage.getItem("wlu_theme") || "light");
+
+    const toggleTheme = () => {
+        const newMode = mode === "light" ? "dark" : "light";
+        setMode(newMode);
+        localStorage.setItem("wlu_theme", newMode);
+    };
+
+    const theme = useMemo(() => createTheme({
+        palette: {
+            mode,
+            primary: {
+                main: "#7c4dff",
+            },
+            background: {
+                default: mode === "light" ? "#f5f5f5" : "#121212",
+                paper: mode === "light" ? "#ffffff" : "#1e1e1e",
+            },
+        },
+        typography: {
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+            h6: { fontWeight: 700 },
+        },
+        components: {
+            MuiPaper: {
+                styleOverrides: {
+                    root: { backgroundImage: 'none' }
+                }
+            }
+        }
+    }), [mode]);
+
+    // --- MENU CONFIG ---
+    const menu = useMemo(() => [
+        { key: "statuses", label: "Order Statuses" },
+        { key: "workflow", label: "Workflow Rules" },
+        { key: "logs", label: "Activity Logs", locked: true },
+        { key: "settings", label: "Settings" },
+    ], []);
 
     const [active, setActive] = useState("statuses");
-    const [ping, setPing] = useState(null);
 
-    async function doPing() {
-        const res = await fetch(cfg.restUrl + "ping", {
-            headers: {
-                "X-WP-Nonce": cfg.nonce,
-            },
-            credentials: "same-origin",
-        });
-        const json = await res.json();
-        setPing(json);
-    }
-
+    // --- RENDER ---
     return (
-        <Box sx={{ display: "flex", gap: 2, padding: 2 }}>
-            {/* Left menu */}
-            <Paper sx={{ width: 260, padding: 1 }}>
-                <Typography sx={{ fontWeight: 700, padding: 1 }}>
-                    WLU Order Workflow
-                </Typography>
+        <ThemeProvider theme={theme}>
+            <CssBaseline />
 
-                <Divider />
+            {/* MAIN LAYOUT CONTAINER
+               - Fixed Height: Fits exactly in the WP Admin window
+               - Overflow Hidden: Prevents the whole page from scrolling
+            */}
+            <Box sx={{
+                display: "flex",
+                height: "calc(100vh - 50px)", // <--- FIXED HEIGHT (Sidebar won't move)
+                backgroundColor: "background.default",
+                borderRadius: 2,
+                overflow: "hidden", // <--- Clip overflow
+                border: 1,
+                borderColor: "divider",
+                mt: 2,
+                mr: 2
+            }}>
 
-                <List>
-                    {menu.map((item) => {
-                        // Logic for the Locked Tab
-                        const isLocked = item.locked;
+                {/* --- SIDEBAR (Fixed) --- */}
+                <Paper
+                    elevation={0}
+                    sx={{
+                        width: 260,
+                        flexShrink: 0,
+                        borderRight: 1,
+                        borderColor: "divider",
+                        display: "flex",
+                        flexDirection: "column",
+                        borderRadius: 0,
+                        zIndex: 2
+                    }}
+                >
+                    {/* BRANDING AREA */}
+                    <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{
+                            width: 36, height: 36,
+                            bgcolor: 'primary.main',
+                            borderRadius: 1,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'white',
+                            boxShadow: '0 4px 12px rgba(124, 77, 255, 0.3)'
+                        }}>
+                            <BoltIcon />
+                        </Box>
 
-                        const button = (
-                            <ListItemButton
-                                key={item.key}
-                                selected={active === item.key}
-                                onClick={() => !isLocked && setActive(item.key)} // Prevent click if locked
-                                sx={isLocked ? { opacity: 0.6, cursor: 'default' } : {}}
-                            >
-                                <ListItemText
-                                    primary={item.label}
-                                    primaryTypographyProps={{
-                                        fontWeight: active === item.key ? 700 : 400
+                        <Box>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                                WLU Workflow
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                                v0.1.0
+                            </Typography>
+                        </Box>
+                    </Box>
+
+                    <Divider />
+
+                    {/* NAVIGATION */}
+                    <List sx={{ flex: 1, px: 2, py: 2, overflowY: 'auto' }}>
+                        {menu.map((item) => {
+                            const isLocked = item.locked;
+                            const isSelected = active === item.key;
+
+                            const button = (
+                                <ListItemButton
+                                    key={item.key}
+                                    selected={isSelected}
+                                    onClick={() => !isLocked && setActive(item.key)}
+                                    sx={{
+                                        borderRadius: 1,
+                                        mb: 0.5,
+                                        opacity: isLocked ? 0.6 : 1,
+                                        cursor: isLocked ? 'default' : 'pointer',
+                                        '&.Mui-selected': {
+                                            bgcolor: alpha(theme.palette.primary.main, 0.08),
+                                            borderLeft: '4px solid',
+                                            borderColor: 'primary.main',
+                                            '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.12) }
+                                        }
                                     }}
-                                />
-                                {isLocked && <LockIcon fontSize="small" sx={{ color: 'text.disabled' }} />}
-                            </ListItemButton>
-                        );
+                                >
+                                    <ListItemText
+                                        primary={item.label}
+                                        primaryTypographyProps={{
+                                            fontWeight: isSelected ? 700 : 500,
+                                            fontSize: '0.9rem'
+                                        }}
+                                    />
+                                    {isLocked && <LockIcon fontSize="small" sx={{ color: 'text.disabled', fontSize: 16 }} />}
+                                </ListItemButton>
+                            );
 
-                        // Wrap locked items in a Tooltip
-                        if (isLocked) {
-                            return (
-                                <Tooltip key={item.key} title="Upgrade to Pro to view logs" placement="right">
+                            return isLocked ? (
+                                <Tooltip key={item.key} title="Available in Pro Version" placement="right">
                                     <Box>{button}</Box>
                                 </Tooltip>
-                            );
-                        }
+                            ) : button;
+                        })}
+                    </List>
 
-                        return button;
-                    })}
-                </List>
+                    {/* DEV MODE INDICATOR */}
+                    {isDev && (
+                        <Box sx={{ px: 2, pb: 2 }}>
+                            <Box sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 1,
+                                bgcolor: alpha(theme.palette.error.main, 0.1),
+                                color: 'error.main',
+                                border: '1px solid',
+                                borderColor: alpha(theme.palette.error.main, 0.2),
+                                borderRadius: 1,
+                                p: 1
+                            }}>
+                                <CodeIcon fontSize="small" />
+                                <Typography variant="caption" fontWeight={800} sx={{ letterSpacing: 1 }}>
+                                    DEV MODE
+                                </Typography>
+                            </Box>
+                        </Box>
+                    )}
 
-                <Divider />
+                    <Divider />
 
-                <Box sx={{ padding: 1 }}>
-                    <Button fullWidth variant="outlined" onClick={doPing} size="small" sx={{ color: 'text.secondary', borderColor: 'rgba(0,0,0,0.12)' }}>
-                        Test Connection
-                    </Button>
+                    {/* FOOTER */}
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 2 }}>
+                        <Typography variant="caption" color="text.secondary">
+                            Appearance
+                        </Typography>
+                        <IconButton onClick={toggleTheme} size="small">
+                            {mode === "light" ? <DarkModeIcon fontSize="small" /> : <LightModeIcon fontSize="small" />}
+                        </IconButton>
+                    </Stack>
+                </Paper>
+
+                {/* --- CONTENT AREA (Scrolls independently) --- */}
+                <Box sx={{
+                    flex: 1,
+                    display: "flex",
+                    flexDirection: "column",
+                    position: 'relative',
+                    overflow: "hidden" // Clip children
+                }}>
+                    <Box sx={{
+                        p: 4,
+                        overflowY: "auto", // <--- THIS is the key: Only this box scrolls
+                        height: "100%",
+                        scrollBehavior: 'smooth'
+                    }}>
+                        {active === "statuses" && <OrderStatusesPage />}
+                        {active === "workflow" && <WorkflowRulesPage />}
+                        {active === "settings" && <SettingsPage />}
+
+                        {/* Extra padding at bottom for comfortable scrolling */}
+                        <Box sx={{ height: 100 }} />
+                    </Box>
                 </Box>
-            </Paper>
 
-            {/* Main content */}
-            <Paper sx={{ flex: 1, padding: 2, minHeight: 500 }}>
-
-                {active === "statuses" && <OrderStatusesPage />}
-
-                {active === "workflow" && <WorkflowRulesPage />}
-
-                {active === "settings" && <SettingsPage />}
-
-                {active === "debug" && (
-                    <>
-                        <Typography variant="h5" sx={{ mb: 1 }}>Debug</Typography>
-                        <Paper variant="outlined" sx={{ p: 1, fontFamily: "monospace", mb: 2 }}>
-                            <pre style={{ margin: 0 }}>{JSON.stringify(ping, null, 2)}</pre>
-                        </Paper>
-                        <Paper variant="outlined" sx={{ p: 1, fontFamily: "monospace" }}>
-                            <pre style={{ margin: 0 }}>{JSON.stringify(cfg, null, 2)}</pre>
-                        </Paper>
-                    </>
-                )}
-            </Paper>
-        </Box>
+            </Box>
+        </ThemeProvider>
     );
 }

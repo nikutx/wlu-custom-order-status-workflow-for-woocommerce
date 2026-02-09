@@ -1,13 +1,19 @@
 <?php
 /**
- * Plugin Name: Custom Order Statuses for WooCommerce
- * Description: Create custom WooCommerce order statuses and manage them via a React admin UI.
- * Version: 0.1.0
- * Author: Web Level Up
- * Requires PHP: 8.0
- * Text Domain: wlu-order-workflow
- */
+ * Plugin Name:       Custom Order Status & Workflow Automation for WooCommerce
+ * Plugin URI:        https://weblevelup.co.uk/plugins/custom-order-status-workflow/
+ * Author URI:        https://weblevelup.co.uk
+ * Description:       Create custom order statuses, automate email notifications, and streamline your fulfillment workflow.
+ * Version:           1.0.1
+ * Author:            Web Level Up
 
+ * Text Domain:       wlu-custom-order-status-workflow  <-- UPDATED
+ * Domain Path:       /languages
+ * Requires at least: 6.2
+ * Requires PHP:      7.4
+ * WC requires at least: 8.0
+ * License:           GPLv2 or later
+ */
 if (!defined('ABSPATH')) exit;
 
 define('WLU_OW_VERSION', '0.1.0');
@@ -43,4 +49,19 @@ add_action('plugins_loaded', function() {
 
     // WooCommerce is present. Launch!
     \WLU_OW\Plugin::init();
+});
+
+// --- ADD SETTINGS LINK TO PLUGIN LIST ---
+add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
+    // 1. Settings Link
+    $settings_link = '<a href="' . admin_url('admin.php?page=wlu-order-workflow&tab=settings') . '">Settings</a>';
+
+    // 2. Premium Link (Highlighted)
+    $pro_link = '<a href="https://weblevelup.co.uk/plugins/wlu-order-workflow" target="_blank" style="color:#2271b1;font-weight:bold;">Go Pro</a>';
+
+    // Add to beginning of array
+    array_unshift($links, $settings_link);
+    $links[] = $pro_link; // Add Pro link at the end
+
+    return $links;
 });

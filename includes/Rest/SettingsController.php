@@ -24,16 +24,23 @@ class SettingsController {
     }
 
     public static function get_settings() {
-        // Get options or defaults
-        $settings = get_option('wlu_ow_options', [
+        // Get existing options or defaults
+        $defaults = [
             'cleanOnUninstall' => false,
             'disableNativeEmails' => false,
+            'enableAdminColors' => true,
+            'enableFrontendColors' => true,
             'licenseKey' => ''
-        ]);
+        ];
+        $stored = get_option('wlu_ow_options', []);
 
-        // Ensure booleans are real booleans for React
-        $settings['cleanOnUninstall'] = (bool) ($settings['cleanOnUninstall'] ?? false);
-        $settings['disableNativeEmails'] = (bool) ($settings['disableNativeEmails'] ?? false);
+        // Merge stored with defaults to ensure all keys exist
+        $settings = wp_parse_args(is_array($stored) ? $stored : [], $defaults);
+
+        // Type casting for React
+        $settings['cleanOnUninstall'] = (bool) $settings['cleanOnUninstall'];
+        $settings['disableNativeEmails'] = (bool) $settings['disableNativeEmails'];
+        $settings['enableAdminColors'] = (bool) $settings['enableAdminColors'];
 
         return new WP_REST_Response($settings, 200);
     }
@@ -41,11 +48,17 @@ class SettingsController {
     public static function save_settings(WP_REST_Request $request) {
         $data = $request->get_json_params();
 
-        $clean = [
-            'cleanOnUninstall' => !empty($data['cleanOnUninstall']),
-            'disableNativeEmails' => !empty($data['disableNativeEmails']),
-            'licenseKey' => sanitize_text_field($data['licenseKey'] ?? '')
-        ];
+        // Fetch existing to merge properly if needed, though usually frontend sends full object
+        $current = get_option('wlu_ow_options', []);
+
+        // Sanitize and Build
+      $clean = [
+          'cleanOnUninstall' => !empty($data['cleanOnUninstall']),
+          'disableNativeEmails' => !empty($data['disableNativeEmails']),
+          'enableAdminColors' => isset($data['enableAdminColors']) ? (bool)$data['enableAdminColors'] : true,
+          'enableFrontendColors' => isset($data['enableFrontendColors']) ? (bool)$data['enableFrontendColors'] : true,
+          'licenseKey' => sanitize_text_field($data['licenseKey'] ?? ($current['licenseKey'] ?? ''))
+      ];
 
         update_option('wlu_ow_options', $clean);
 

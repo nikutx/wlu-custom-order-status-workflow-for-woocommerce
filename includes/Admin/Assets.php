@@ -1,65 +1,82 @@
 <?php
 namespace WLU_OW\Admin;
 
-use WLU_OW\Plugin;
-
 if (!defined('ABSPATH')) exit;
 
-final class Assets {
+class Assets {
+    public function enqueue() {
+        $screen = get_current_screen();
 
-  public function enqueue(string $hook): void {
-    $expected_hook = 'toplevel_page_' . Plugin::SLUG;
-    if ($hook !== $expected_hook) return;
+        // Only load on our plugin page
+        if (!$screen || strpos($screen->id, 'wlu-order-workflow') === false) {
+            return;
+        }
 
-    $config = [
-      'restUrl'  => esc_url_raw(rest_url(Plugin::REST_NS . '/')),
-      'nonce'    => wp_create_nonce('wp_rest'),
-      'slug'     => Plugin::SLUG,
-      'version'  => WLU_OW_VERSION,
-    ];
+        $version = WLU_OW_VERSION;
+        $url = WLU_OW_URL;
+        $path = WLU_OW_PATH;
 
-    $is_dev = defined('WLU_OW_DEV') && WLU_OW_DEV;
+        // --- SMART MODE DETECTION ---
+        if (file_exists($path . 'dist/app.js')) {
+            $is_prod = true;
+            $js_url = $url . 'dist/app.js';
+            $css_url = $url . 'dist/app.css';
+        } elseif (file_exists($path . 'dist/assets/app.js')) {
+            $is_prod = true;
+            $js_url = $url . 'dist/assets/app.js';
+            $css_url = $url . 'dist/assets/app.css';
+        } else {
+            $is_prod = false;
+        }
 
-    if ($is_dev) {
-      add_action('admin_print_footer_scripts', function () use ($config) {
-        echo '<script>window.WLU_OW=' . wp_json_encode($config) . ';</script>';
+        if ($is_prod) {
+            // --- PRODUCTION MODE ---
+            wp_enqueue_script('wlu-ow-app', $js_url, ['wp-element', 'wp-i18n'], $version, true);
+            wp_enqueue_style('wlu-ow-app', $css_url, [], $version);
+        } else {
+            // --- DEVELOPMENT MODE ---
+            add_filter('script_loader_tag', function($tag, $handle, $src) {
+                if (in_array($handle, ['wlu-ow-vite-client', 'wlu-ow-app'])) {
+                    return '<script type="module" src="' . esc_url($src) . '"></script>';
+                }
+                return $tag;
+            }, 10, 3);
 
-        echo '<script type="module" src="http://dev01.local:5173/@vite/client"></script>';
+            // Inject React Preamble
+            add_action('admin_head', function() {
+                echo '
+                <script type="module">
+                    import RefreshRuntime from "http://dev01.local:5173/@react-refresh"
+                    RefreshRuntime.injectIntoGlobalHook(window)
+                    window.$RefreshReg$ = () => {}
+                    window.$RefreshSig$ = () => (type) => type
+                    window.__vite_plugin_react_preamble_installed__ = true
+                </script>';
+            });
 
-        echo '<script type="module">
-          import RefreshRuntime from "http://dev01.local:5173/@react-refresh";
-          RefreshRuntime.injectIntoGlobalHook(window);
-          window.$RefreshReg$ = () => {};
-          window.$RefreshSig$ = () => (type) => type;
-          window.__vite_plugin_react_preamble_installed__ = true;
-        </script>';
+            wp_enqueue_script('wlu-ow-vite-client', 'http://dev01.local:5173/@vite/client', [], null, true);
+            wp_enqueue_script('wlu-ow-app', 'http://dev01.local:5173/src/main.jsx', ['wp-element'], time(), true);
+        }
 
-        echo '<script type="module" src="http://dev01.local:5173/src/main.jsx"></script>';
-      }, 999);
+        // --- 3. FULL SCREEN FIX (CSS) ---
+        // This hides the default WP Title ("Custom Order Statuses...")
+        // so your React App Sidebar becomes the only header.
+        $css = "
+            /* Hide WP Title */
+            #wpbody-content > .wrap > h1 { display: none !important; }
+            /* Remove notices spacer if empty */
+            .wp-header-end { display: none !important; }
+            /* Pull app up to the top */
+            #wpbody-content > .wrap { margin-top: 0 !important; padding-top: 10px !important; }
+        ";
+        wp_add_inline_style('admin-bar', $css);
 
-      return;
+        // Pass settings
+        wp_localize_script('wlu-ow-app', 'WLU_OW', [
+            'restUrl' => rest_url('wlu-ow/v1/'),
+            'nonce'   => wp_create_nonce('wp_rest'),
+            'adminEmail' => get_option('admin_email'),
+            'isPro'   => false
+        ]);
     }
-
-    // Production build from build/admin-app/
-    $build_dir = WLU_OW_PATH . 'build/admin-app/';
-    $build_url = WLU_OW_URL  . 'build/admin-app/';
-
-    $manifest_path = $build_dir . 'manifest.json';
-    if (!file_exists($manifest_path)) return;
-
-    $manifest = json_decode((string) file_get_contents($manifest_path), true);
-    if (!is_array($manifest)) return;
-
-    $entry = $manifest['index.html'] ?? $manifest['src/main.jsx'] ?? null;
-    if (!$entry || empty($entry['file'])) return;
-
-    if (!empty($entry['css']) && is_array($entry['css'])) {
-      foreach ($entry['css'] as $i => $css) {
-        wp_enqueue_style('wlu-ow-admin-css-' . ($i + 1), $build_url . ltrim($css, '/'), [], null);
-      }
-    }
-
-    wp_enqueue_script('wlu-ow-admin-js', $build_url . ltrim($entry['file'], '/'), [], null, true);
-    wp_add_inline_script('wlu-ow-admin-js', 'window.WLU_OW=' . wp_json_encode($config) . ';', 'before');
-  }
 }
