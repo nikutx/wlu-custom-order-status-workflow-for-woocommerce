@@ -25,7 +25,6 @@ final class Routes {
     $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
     $slug = preg_replace('/(^-|-$)+/', '', $slug);
 
-    // 20-Char Limit Fix (wc- + 17 chars = 20)
     if (strlen($slug) > 17) {
         $slug = substr($slug, 0, 17);
         $slug = rtrim($slug, '-');
@@ -58,16 +57,10 @@ final class Routes {
     return $try;
   }
 
-  /**
-   * Helper: Get real-time counts bypassing WooCommerce caching.
-   * Checks both HPOS (wp_wc_orders) and Legacy (wp_posts).
-   */
   private function get_live_counts(): array {
       global $wpdb;
 
       $counts = [];
-
-      // 1. Try HPOS Table first (High Performance Order Storage)
       $hpos_table = $wpdb->prefix . 'wc_orders';
 
       if ($wpdb->get_var("SHOW TABLES LIKE '$hpos_table'") === $hpos_table) {
@@ -75,7 +68,6 @@ final class Routes {
           if ($results) {
               foreach ($results as $row) {
                   $status = $row['status'];
-                  // Safer prefix removal than ltrim
                   if (str_starts_with($status, 'wc-')) {
                       $status = substr($status, 3);
                   }
@@ -86,7 +78,6 @@ final class Routes {
           }
       }
 
-      // 2. Fallback to Legacy Table (wp_posts)
       $results = $wpdb->get_results(
           "SELECT post_status, COUNT(*) as cnt
            FROM {$wpdb->posts}
@@ -97,7 +88,6 @@ final class Routes {
 
       foreach ($results as $row) {
           $status = $row['post_status'];
-          // Safer prefix removal
           if (str_starts_with($status, 'wc-')) {
               $status = substr($status, 3);
           }
@@ -109,6 +99,15 @@ final class Routes {
   }
 
   public function register(): void {
+    // --- ADDED: Register Workflow Rules Controller ---
+    require_once __DIR__ . '/WorkflowRulesController.php';
+    WorkflowRulesController::register_routes();
+
+    // -------------------------------------------------
+    // --- ADD SETTINGS CONTROLLER ---
+        require_once __DIR__ . '/SettingsController.php';
+        SettingsController::register_routes();
+        //
     register_rest_route(Plugin::REST_NS, '/ping', [
       'methods' => 'GET',
       'permission_callback' => fn() => current_user_can('manage_options'),
@@ -196,7 +195,7 @@ final class Routes {
           $updated['id'] = $id;
           if (empty($updated['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);
 
-          $updated['slug'] = $existing['slug']; // Lock slug
+          $updated['slug'] = $existing['slug'];
 
           $statuses[$foundIndex] = $updated;
           $this->store->save_all($statuses);
@@ -220,9 +219,7 @@ final class Routes {
           }
           if (!$target) return new WP_Error('wlu_not_found', 'Status not found', ['status' => 404]);
 
-          // Safe Reassign Logic
           if (!empty($reassignTo)) {
-              global $wpdb;
               $oldKey = $this->store->wc_key_from_slug($target['slug']);
               $newKey = sanitize_key($reassignTo);
 

@@ -3,17 +3,21 @@ namespace WLU_OW;
 
 if (!defined('ABSPATH')) exit;
 
+// 1. Load the files
 require_once WLU_OW_PATH . 'includes/Admin/Menu.php';
 require_once WLU_OW_PATH . 'includes/Admin/Assets.php';
 require_once WLU_OW_PATH . 'includes/Domain/StatusesStore.php';
 require_once WLU_OW_PATH . 'includes/Woo/StatusesRegistrar.php';
 require_once WLU_OW_PATH . 'includes/Rest/Routes.php';
+// --- ADDED THIS LINE ---
+require_once WLU_OW_PATH . 'includes/Woo/WorkflowEngine.php';
 
 use WLU_OW\Admin\Menu;
 use WLU_OW\Admin\Assets;
 use WLU_OW\Domain\StatusesStore;
 use WLU_OW\Woo\StatusesRegistrar;
 use WLU_OW\Rest\Routes;
+use WLU_OW\Woo\WorkflowEngine;
 
 final class Plugin {
   public const SLUG = 'wlu-order-workflow';
@@ -33,5 +37,8 @@ final class Plugin {
     add_filter('wc_order_statuses', [$woo, 'filter_wc_order_statuses']);
 
     add_action('rest_api_init', [$rest, 'register']);
+
+    // --- START THE ENGINE HERE ---
+    WorkflowEngine::init();
   }
 }
