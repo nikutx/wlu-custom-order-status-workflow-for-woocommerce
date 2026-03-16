@@ -61,7 +61,13 @@ export default function SettingsPage() {
         setSavingKey(true);
         try {
             const keyToSubmit = draftKey.trim() !== "" ? draftKey : settings.licenseKey;
-            const data = await SettingsAPI.verifyLicense({ license_key: keyToSubmit, action: 'verify' });
+
+            // 🚨 ADDED THE PLUGIN SLUG TO THE PAYLOAD 🚨
+            const data = await SettingsAPI.verifyLicense({
+                license_key: keyToSubmit,
+                plugin_slug: 'wlu-workflow-pro',
+                action: 'verify'
+            });
 
             setSnack({ severity: 'success', message: data.message || 'License activated!' });
             setTimeout(() => { window.location.reload(); }, 1200);
@@ -75,7 +81,11 @@ export default function SettingsPage() {
         setConfirmOpen(false);
         setSavingKey(true);
         try {
-            const data = await SettingsAPI.verifyLicense({ action: 'disconnect' });
+            // 🚨 ADDED THE PLUGIN SLUG HERE AS WELL 🚨
+            const data = await SettingsAPI.verifyLicense({
+                plugin_slug: 'wlu-workflow-pro',
+                action: 'disconnect'
+            });
             setSnack({ severity: 'info', message: data.message || 'License disconnected.' });
             setTimeout(() => { window.location.reload(); }, 800);
         } catch (e) {

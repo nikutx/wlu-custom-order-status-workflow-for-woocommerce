@@ -103,8 +103,6 @@ export default function OrderStatusesPage() {
     });
     const [reassignTo, setReassignTo] = React.useState("");
 
-    // Limits safely removed!
-
     const showSnack = (severity, message) => setSnack({ severity, message });
 
     const refresh = React.useCallback(async () => {
@@ -352,15 +350,22 @@ export default function OrderStatusesPage() {
                     </Typography>
                 )}
             </TableCell>
+
+            {/* 🚨 THE UPDATED TOGGLE CELL 🚨 */}
             <TableCell align="center">
-                <Switch
-                    size="small"
-                    checked={!!row.enabled}
-                    disabled={!row._isEditing || row._isCore}
-                    onChange={(e) => updateRow(row.id, 'enabled', e.target.checked)}
-                    sx={{ ...switchStyle, opacity: (row._isEditing && !row._isCore) ? 1 : 0.6 }}
-                />
+                {!row._isCore ? (
+                    <Switch
+                        size="small"
+                        checked={!!row.enabled}
+                        disabled={!row._isEditing}
+                        onChange={(e) => updateRow(row.id, 'enabled', e.target.checked)}
+                        sx={{ ...switchStyle, opacity: row._isEditing ? 1 : 0.6 }}
+                    />
+                ) : (
+                    <span style={{ color: theme.palette.text.disabled }}>—</span>
+                )}
             </TableCell>
+
             <TableCell align="right">
                 {row._isEditing ? (
                     <Stack direction="row" justifyContent="flex-end">

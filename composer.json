@@ -14,7 +14,7 @@
     "repositories": [
         {
             "type": "path",
-            "url": "C:/codePlayground/wlu-sdk",
+            "url": "C:/codePlayground/WEBLEVELUP_SDK",
             "options": {
                 "symlink": false
             }

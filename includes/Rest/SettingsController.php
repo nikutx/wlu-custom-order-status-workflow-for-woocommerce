@@ -111,10 +111,10 @@ class SettingsController {
         }
 
         // --- DYNAMIC NETWORK TEST (Local-to-Local OR Prod-to-Prod) ---
-        if (class_exists('\WLU_SDK\Licensing\LicenseClient')) {
+        if (class_exists('\WEBLEVELUP_SDK\Licensing\LicenseClient')) {
             // This will use http://wlu-commerce.local during development!
-            $client = new \WLU_SDK\Licensing\LicenseClient(WEBLEVELUP_STATUS_HUB_URL);
-            $response = $client->activate_license($provided_key);
+            $client = new \WEBLEVELUP_SDK\Licensing\LicenseClient(WEBLEVELUP_STATUS_HUB_URL);
+            $response = $client->activate_license($provided_key, 'wlu-workflow-pro');
 
             // If the server rejects the key, throw the real error back to React
             if (is_wp_error($response)) {
