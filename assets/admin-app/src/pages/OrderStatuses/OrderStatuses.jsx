@@ -1,8 +1,10 @@
+// src/pages/OrderStatuses/OrderStatuses.jsx
+
 import * as React from "react";
 import {
     Alert, Box, Button, Chip, Snackbar, Stack, Input, Typography, Paper,
     Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
-    FormControl, InputLabel, Select, MenuItem, Switch, Skeleton, // <--- Added Skeleton
+    FormControl, InputLabel, Select, MenuItem, Switch, Skeleton,
     Table, TableBody, TableCell, TableContainer, TableHead, TableRow, IconButton, Tooltip,
     useTheme, alpha, InputAdornment
 } from "@mui/material";
@@ -13,11 +15,11 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Close";
-import StarIcon from "@mui/icons-material/Star";
 import LockIcon from "@mui/icons-material/Lock";
 import SearchIcon from "@mui/icons-material/Search";
 
 import { StatusesAPI } from "../../api/statuses";
+import { RulesAPI } from "../../api/rules"; // <--- Added for Smart Delete
 
 // ---------- helpers ----------
 function makeId() {
@@ -59,7 +61,17 @@ const CORE_STATUSES = [
 const inputStyle = {
     fontSize: '0.875rem',
     color: 'text.primary',
-    '& input': { border: 'none !important', boxShadow: 'none !important', borderRadius: '0 !important', background: 'transparent !important', padding: '4px 0 !important', height: 'auto !important', minHeight: 'auto !important', lineHeight: '1.5 !important', color: 'inherit' },
+    '& input': {
+        border: 'none !important',
+        boxShadow: 'none !important',
+        borderRadius: '0 !important',
+        background: 'transparent !important',
+        padding: '4px 0 !important',
+        height: 'auto !important',
+        minHeight: 'auto !important',
+        lineHeight: '1.5 !important',
+        color: 'inherit'
+    },
     '&:before': { borderBottom: '1px solid rgba(150, 150, 150, 0.42)' },
     '&:after': { borderBottom: '2px solid #7c4dff' }
 };
@@ -75,20 +87,23 @@ export default function OrderStatusesPage() {
     const isDark = theme.palette.mode === 'dark';
 
     const [rows, setRows] = React.useState([]);
-    const [loading, setLoading] = React.useState(true); // Default true for initial load
+    const [rules, setRules] = React.useState([]);
+    const [loading, setLoading] = React.useState(true);
     const [snack, setSnack] = React.useState(null);
     const [error, setError] = React.useState(null);
     const [searchTerm, setSearchTerm] = React.useState("");
 
-    const [deleteDialog, setDeleteDialog] = React.useState({ open: false, targetId: null, count: 0, label: '' });
+    // Added affectedRules array for Smart Delete warning
+    const [deleteDialog, setDeleteDialog] = React.useState({
+        open: false,
+        targetId: null,
+        count: 0,
+        label: '',
+        affectedRules: []
+    });
     const [reassignTo, setReassignTo] = React.useState("");
 
-    // Limits
-    const MAX_FREE_STATUSES = 2;
-    const isPro = false;
-    const savedCustomCount = rows.filter(r => !r._draft && !r._isCore).length;
-    const isAddDisabled = !isPro && savedCustomCount >= MAX_FREE_STATUSES;
-    const showLimitBanner = !isPro && savedCustomCount >= MAX_FREE_STATUSES;
+    // Limits safely removed!
 
     const showSnack = (severity, message) => setSnack({ severity, message });
 
@@ -96,7 +111,13 @@ export default function OrderStatusesPage() {
         setLoading(true);
         setError(null);
         try {
-            const list = await StatusesAPI.list();
+            // Fetch BOTH statuses and rules simultaneously
+            const [list, rulesData] = await Promise.all([
+                StatusesAPI.list(),
+                RulesAPI.list().catch(() => [])
+            ]);
+
+            setRules(rulesData);
             const dbRows = (Array.isArray(list) ? list : []).map(r => normalizeRow(r));
 
             const coreRows = CORE_STATUSES.map(core => {
@@ -120,13 +141,23 @@ export default function OrderStatusesPage() {
 
     // --- ACTIONS ---
     const handleAdd = () => {
-        if (isAddDisabled) { showSnack("warning", "Limit reached. Upgrade to Pro!"); return; }
         const id = makeId();
-        const draft = normalizeRow({ id, label: "", slug: "", color: "#22C55E", enabled: true, sort: (rows.filter(r => !r._isCore).length * 10) + 10, _draft: true, _isEditing: true, _isCore: false });
+        const draft = normalizeRow({
+            id,
+            label: "",
+            slug: "",
+            color: "#22C55E",
+            enabled: true,
+            sort: (rows.filter(r => !r._isCore).length * 10) + 10,
+            _draft: true,
+            _isEditing: true,
+            _isCore: false
+        });
         setRows(prev => [draft, ...prev]);
     };
 
     const handleEditClick = (id) => setRows(prev => prev.map(r => r.id === id ? { ...r, _isEditing: true } : r));
+
     const handleCancelClick = (id) => setRows(prev => {
         const row = prev.find(r => r.id === id);
         if (row && row._draft) return prev.filter(r => r.id !== id);
@@ -139,7 +170,6 @@ export default function OrderStatusesPage() {
 
         if (!row._isCore) {
             if (!String(row.label || "").trim()) { showSnack("error", "Label is required"); return; }
-            if (row._draft && savedCustomCount >= MAX_FREE_STATUSES && !isPro) { showSnack("error", "Free limit reached."); return; }
         }
 
         try {
@@ -163,33 +193,66 @@ export default function OrderStatusesPage() {
         } catch (e) { showSnack("error", e.message || "Save failed"); }
     };
 
-    const handleKeyDown = (e, id) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveClick(id); } else if (e.key === 'Escape') { e.preventDefault(); handleCancelClick(id); } };
+    const handleKeyDown = (e, id) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleSaveClick(id);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            handleCancelClick(id);
+        }
+    };
+
     const handleLabelChange = (id, newLabel) => setRows(prev => prev.map(r => r.id === id && !r._isCore ? { ...r, label: newLabel, slug: r._draft ? toSlug(newLabel) : r.slug } : r));
     const updateRow = (id, field, value) => setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
 
-    // --- DELETE LOGIC (FIXED) ---
+    // --- SMART DELETE LOGIC ---
     const handleDeleteClick = (id) => {
         const row = rows.find((r) => r.id === id);
         if (!row) return;
-        setReassignTo(""); // Reset
-        setDeleteDialog({ open: true, targetId: id, count: row.count, label: row.label || 'this status' });
+        setReassignTo("");
+
+        // Find orphaned rules so we can warn the user!
+        const affectedRules = rules.filter(r => {
+            const rSlug = (r.trigger_value || '').replace('wc-', '');
+            const tSlug = (row.slug || '').replace('wc-', '');
+            return rSlug === tSlug;
+        });
+
+        setDeleteDialog({
+            open: true,
+            targetId: id,
+            count: row.count,
+            label: row.label || 'this status',
+            affectedRules
+        });
     };
 
     const performDelete = async () => {
-        const { targetId, count } = deleteDialog;
+        const { targetId, count, affectedRules } = deleteDialog;
         const countToMove = count || 0;
+
         try {
+            // 1. Delete Status & Reassign Orders on Backend
             let path = `statuses/${encodeURIComponent(targetId)}`;
             if (count > 0 && reassignTo) path += `?reassign=${encodeURIComponent(reassignTo)}`;
-            const cfg = window.WLU_OW;
+            const cfg = window.WEBLEVELUP_STATUS;
             await fetch(cfg.restUrl + path, { method: 'DELETE', headers: { 'X-WP-Nonce': cfg.nonce } });
+
+            // 2. Sync Orphaned Rules
+            for (const rule of affectedRules) {
+                if (reassignTo) {
+                    await RulesAPI.update(rule.id, { trigger_value: reassignTo });
+                } else {
+                    await RulesAPI.delete(rule.id);
+                }
+            }
 
             setRows(prev => {
                 const remaining = prev.filter(r => r.id !== targetId);
                 // UPDATE COUNTS LOCALLY
                 if (countToMove > 0 && reassignTo) {
                     return remaining.map(row => {
-                        // Normalize slugs for comparison (remove wc- prefix to match safely)
                         const rowSlug = (row.slug || '').replace('wc-', '');
                         const targetSlug = reassignTo.replace('wc-', '');
 
@@ -202,52 +265,130 @@ export default function OrderStatusesPage() {
                 return remaining;
             });
 
-            showSnack("success", "Deleted.");
-            setDeleteDialog({ open: false, targetId: null, count: 0, label: '' });
-        } catch (e) { showSnack("error", e?.message || "Delete failed"); }
+            // Refresh rules silently in background
+            RulesAPI.list().then(setRules).catch(() => {});
+
+            showSnack("success", "Status deleted & workflow data synced.");
+            setDeleteDialog({ open: false, targetId: null, count: 0, label: '', affectedRules: [] });
+        } catch (e) {
+            showSnack("error", e?.message || "Delete failed");
+        }
     };
 
     // --- RENDER HELPERS ---
     const renderRow = (row) => (
-        <TableRow key={row.id} sx={{ backgroundColor: row._isEditing ? alpha(theme.palette.primary.main, 0.08) : 'inherit', '&:hover': { backgroundColor: row._isEditing ? alpha(theme.palette.primary.main, 0.12) : 'action.hover' } }}>
+        <TableRow
+            key={row.id}
+            sx={{
+                backgroundColor: row._isEditing ? alpha(theme.palette.primary.main, 0.08) : 'inherit',
+                '&:hover': { backgroundColor: row._isEditing ? alpha(theme.palette.primary.main, 0.12) : 'action.hover' }
+            }}
+        >
             <TableCell>
                 {row._isEditing && !row._isCore ? (
-                    <Input fullWidth autoFocus value={row.label} onChange={(e) => handleLabelChange(row.id, e.target.value)} onKeyDown={(e) => handleKeyDown(e, row.id)} sx={inputStyle} />
+                    <Input
+                        fullWidth
+                        autoFocus
+                        value={row.label}
+                        onChange={(e) => handleLabelChange(row.id, e.target.value)}
+                        onKeyDown={(e) => handleKeyDown(e, row.id)}
+                        sx={inputStyle}
+                    />
                 ) : (
                     <Stack direction="row" alignItems="center" spacing={1}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, color: row._isCore ? 'text.secondary' : 'text.primary' }}>{row.label}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: row._isCore ? 'text.secondary' : 'text.primary' }}>
+                            {row.label}
+                        </Typography>
                         {row._isCore && <LockIcon sx={{ fontSize: 14, color: 'text.disabled' }} />}
                     </Stack>
                 )}
             </TableCell>
             <TableCell>
                 {row._isEditing && row._draft ? (
-                    <Input fullWidth value={row.slug} onChange={(e) => updateRow(row.id, 'slug', e.target.value)} sx={{ ...inputStyle, fontFamily: 'monospace', color: 'text.secondary' }} />
-                ) : <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary', fontSize: '0.8rem', bgcolor: 'action.selected', px: 1, borderRadius: 1, display: 'inline-block' }}>{row.slug || "—"}</Typography>}
+                    <Input
+                        fullWidth
+                        value={row.slug}
+                        onChange={(e) => updateRow(row.id, 'slug', e.target.value)}
+                        sx={{ ...inputStyle, fontFamily: 'monospace', color: 'text.secondary' }}
+                    />
+                ) : (
+                    <Typography variant="body2" sx={{ fontFamily: 'monospace', color: 'text.secondary', fontSize: '0.8rem', bgcolor: 'action.selected', px: 1, borderRadius: 1, display: 'inline-block' }}>
+                        {row.slug || "—"}
+                    </Typography>
+                )}
             </TableCell>
-            <TableCell align="center"><span style={{ color: theme.palette.text.disabled }}>{row.count > 0 ? row.count : '-'}</span></TableCell>
+            <TableCell align="center">
+                <span style={{ color: theme.palette.text.disabled }}>
+                    {row.count > 0 ? row.count : '-'}
+                </span>
+            </TableCell>
             <TableCell align="center">
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                     {row._isEditing ? (
                         <Box sx={{ position: 'relative', width: 24, height: 24, borderRadius: '50%', bgcolor: row.color, border: '2px solid #fff', boxShadow: `0 0 0 2px ${theme.palette.primary.main}`, cursor: 'pointer' }}>
-                            <input type="color" value={row.color} onChange={(e) => updateRow(row.id, 'color', e.target.value)} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }} />
+                            <input
+                                type="color"
+                                value={row.color}
+                                onChange={(e) => updateRow(row.id, 'color', e.target.value)}
+                                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                            />
                         </Box>
-                    ) : <Box sx={{ width: 20, height: 20, borderRadius: '50%', bgcolor: row.color, border: '2px solid #fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.1)' }} />}
+                    ) : (
+                        <Box sx={{ width: 20, height: 20, borderRadius: '50%', bgcolor: row.color, border: '2px solid #fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.1)' }} />
+                    )}
                 </Box>
             </TableCell>
             <TableCell align="center">
-                {row._isEditing && !row._isCore ? <Input type="number" value={row.sort} onChange={(e) => updateRow(row.id, 'sort', e.target.value)} sx={{ ...inputStyle, width: 40, '& input': { textAlign: 'center' } }} /> : <Typography variant="body2" color="text.secondary">{row.sort}</Typography>}
+                {row._isEditing && !row._isCore ? (
+                    <Input
+                        type="number"
+                        value={row.sort}
+                        onChange={(e) => updateRow(row.id, 'sort', e.target.value)}
+                        sx={{ ...inputStyle, width: 40, '& input': { textAlign: 'center' } }}
+                    />
+                ) : (
+                    <Typography variant="body2" color="text.secondary">
+                        {row.sort}
+                    </Typography>
+                )}
             </TableCell>
             <TableCell align="center">
-                <Switch size="small" checked={!!row.enabled} disabled={!row._isEditing || row._isCore} onChange={(e) => updateRow(row.id, 'enabled', e.target.checked)} sx={{ ...switchStyle, opacity: (row._isEditing && !row._isCore) ? 1 : 0.6 }} />
+                <Switch
+                    size="small"
+                    checked={!!row.enabled}
+                    disabled={!row._isEditing || row._isCore}
+                    onChange={(e) => updateRow(row.id, 'enabled', e.target.checked)}
+                    sx={{ ...switchStyle, opacity: (row._isEditing && !row._isCore) ? 1 : 0.6 }}
+                />
             </TableCell>
             <TableCell align="right">
                 {row._isEditing ? (
-                    <Stack direction="row" justifyContent="flex-end"><Tooltip title="Save"><IconButton size="small" onClick={() => handleSaveClick(row.id)} color="primary"><SaveIcon /></IconButton></Tooltip><Tooltip title="Cancel"><IconButton size="small" onClick={() => handleCancelClick(row.id)}><CancelIcon /></IconButton></Tooltip></Stack>
+                    <Stack direction="row" justifyContent="flex-end">
+                        <Tooltip title="Save">
+                            <IconButton size="small" onClick={() => handleSaveClick(row.id)} color="primary">
+                                <SaveIcon />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Cancel">
+                            <IconButton size="small" onClick={() => handleCancelClick(row.id)}>
+                                <CancelIcon />
+                            </IconButton>
+                        </Tooltip>
+                    </Stack>
                 ) : (
                     <Stack direction="row" justifyContent="flex-end">
-                        <Tooltip title={row._isCore ? "Edit Color" : "Edit"}><IconButton size="small" onClick={() => handleEditClick(row.id)}><EditIcon /></IconButton></Tooltip>
-                        {!row._isCore && <Tooltip title="Delete"><IconButton size="small" onClick={() => handleDeleteClick(row.id)} color="error"><DeleteIcon /></IconButton></Tooltip>}
+                        <Tooltip title={row._isCore ? "Edit Color" : "Edit"}>
+                            <IconButton size="small" onClick={() => handleEditClick(row.id)}>
+                                <EditIcon />
+                            </IconButton>
+                        </Tooltip>
+                        {!row._isCore && (
+                            <Tooltip title="Delete">
+                                <IconButton size="small" onClick={() => handleDeleteClick(row.id)} color="error">
+                                    <DeleteIcon />
+                                </IconButton>
+                            </Tooltip>
+                        )}
                     </Stack>
                 )}
             </TableCell>
@@ -264,13 +405,22 @@ export default function OrderStatusesPage() {
             <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
                 <Typography variant="h6" sx={{ fontWeight: 800 }}>Order Statuses</Typography>
                 <Stack direction="row" spacing={2} alignItems="center" sx={{ flex: 1, justifyContent: 'flex-end' }}>
-                    <Input placeholder="Search statuses..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} startAdornment={<InputAdornment position="start"><SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} /></InputAdornment>} sx={{ ...inputStyle, maxWidth: 250, bgcolor: 'background.paper', px: 1, borderRadius: 1 }} />
-                    <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={refresh} disabled={loading}>Refresh</Button>
-                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={handleAdd} disabled={isAddDisabled} color={isAddDisabled ? "warning" : "primary"}>{isAddDisabled ? "Pro Required" : "Add"}</Button>
+                    <Input
+                        placeholder="Search statuses..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        startAdornment={<InputAdornment position="start"><SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} /></InputAdornment>}
+                        sx={{ ...inputStyle, maxWidth: 250, bgcolor: 'background.paper', px: 1, borderRadius: 1 }}
+                    />
+                    <Button size="small" variant="outlined" startIcon={<RefreshIcon />} onClick={refresh} disabled={loading}>
+                        Refresh
+                    </Button>
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={handleAdd} color="primary" sx={{ '&:hover': { color: '#ffffff' } }}>
+                        Add
+                    </Button>
                 </Stack>
             </Stack>
 
-            {showLimitBanner && <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2, bgcolor: alpha(theme.palette.warning.main, 0.1), borderColor: 'warning.main' }}><Box sx={{ bgcolor: 'warning.main', color: '#000', borderRadius: '50%', p: 1, display: 'flex' }}><StarIcon fontSize="small" /></Box><Box sx={{ flex: 1 }}><Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Free limit reached.</Typography><Typography variant="body2" color="text.secondary">Upgrade to Pro for unlimited custom statuses.</Typography></Box><Button variant="contained" color="warning" size="small" href="#">Upgrade</Button></Paper>}
             {error && <Alert severity="error">{error}</Alert>}
 
             <TableContainer component={Paper} variant="outlined" sx={{ border: 1, borderColor: 'divider', boxShadow: 'none' }}>
@@ -300,41 +450,80 @@ export default function OrderStatusesPage() {
                             </TableRow>
                         ))}
 
-                        {!loading && customList.length > 0 && <TableRow><TableCell colSpan={7} sx={{ bgcolor: isDark ? alpha(theme.palette.primary.main, 0.1) : '#e3f2fd', py: 1, fontWeight: 700, color: 'primary.main', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>MY CUSTOM STATUSES</TableCell></TableRow>}
+                        {!loading && customList.length > 0 && (
+                            <TableRow>
+                                <TableCell colSpan={7} sx={{ bgcolor: isDark ? alpha(theme.palette.primary.main, 0.1) : '#e3f2fd', py: 1, fontWeight: 700, color: 'primary.main', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                                    MY CUSTOM STATUSES
+                                </TableCell>
+                            </TableRow>
+                        )}
                         {!loading && customList.map(renderRow)}
-                        {!loading && <TableRow><TableCell colSpan={7} sx={{ bgcolor: isDark ? alpha(theme.palette.secondary.main, 0.1) : '#f3e5f5', py: 1, fontWeight: 700, color: 'secondary.main', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>WOOCOMMERCE CORE (COLOR OVERRIDES)</TableCell></TableRow>}
+
+                        {!loading && (
+                            <TableRow>
+                                <TableCell colSpan={7} sx={{ bgcolor: isDark ? alpha(theme.palette.secondary.main, 0.1) : '#f3e5f5', py: 1, fontWeight: 700, color: 'secondary.main', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                                    WOOCOMMERCE CORE (COLOR OVERRIDES)
+                                </TableCell>
+                            </TableRow>
+                        )}
                         {!loading && coreList.map(renderRow)}
                     </TableBody>
                 </Table>
             </TableContainer>
 
-            {/* DELETE DIALOG (Fixed Reassign Dropdown) */}
-            <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, targetId: null, count: 0, label: '' })}>
+            {/* DELETE DIALOG (With Smart Rules Warning) */}
+            <Dialog open={deleteDialog.open} onClose={() => setDeleteDialog({ open: false, targetId: null, count: 0, label: '', affectedRules: [] })}>
                 <DialogTitle>Delete Status?</DialogTitle>
                 <DialogContent>
+
+                    {deleteDialog.affectedRules.length > 0 && (
+                        <DialogContentText sx={{ mb: 2, color: 'error.main', p: 1.5, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 1 }}>
+                            <strong>Warning:</strong> This status is currently used by <strong>{deleteDialog.affectedRules.length} automation rule(s)</strong>.
+                            Reassigning orders below will also reassign the rules. Otherwise, the rules will be deleted.
+                        </DialogContentText>
+                    )}
+
                     {deleteDialog.count > 0 ? (
                         <>
-                            <DialogContentText sx={{ mb: 2, color: 'error.main' }}><strong>Warning:</strong> Status used by <strong>{deleteDialog.count} orders</strong>.</DialogContentText>
+                            <DialogContentText sx={{ mb: 2, color: 'error.main' }}>
+                                <strong>Warning:</strong> Status used by <strong>{deleteDialog.count} orders</strong>.
+                            </DialogContentText>
                             <FormControl fullWidth size="small">
                                 <InputLabel>Reassign Orders To</InputLabel>
-                                {/* Showing ALL valid statuses to reassign to (Custom + Core) */}
                                 <Select value={reassignTo} label="Reassign Orders To" onChange={(e) => setReassignTo(e.target.value)}>
                                     {rows
-                                        .filter(r => r.id !== deleteDialog.targetId && !r._draft) // Don't show self or drafts
+                                        .filter(r => r.id !== deleteDialog.targetId && !r._draft)
                                         .map(r => <MenuItem key={r.slug} value={r.slug}>{r.label}</MenuItem>)
                                     }
                                 </Select>
                             </FormControl>
                         </>
-                    ) : <DialogContentText>Are you sure you want to delete <strong>{deleteDialog.label}</strong>?</DialogContentText>}
+                    ) : (
+                        <DialogContentText>
+                            Are you sure you want to delete <strong>{deleteDialog.label}</strong>?
+                        </DialogContentText>
+                    )}
                 </DialogContent>
                 <DialogActions>
-                    <Button onClick={() => setDeleteDialog({ open: false, targetId: null, count: 0, label: '' })}>Cancel</Button>
-                    <Button onClick={performDelete} variant="contained" color="error" disabled={deleteDialog.count > 0 && !reassignTo}>Delete</Button>
+                    <Button onClick={() => setDeleteDialog({ open: false, targetId: null, count: 0, label: '', affectedRules: [] })}>
+                        Cancel
+                    </Button>
+                    <Button onClick={performDelete} variant="contained" color="error" disabled={deleteDialog.count > 0 && !reassignTo}>
+                        Delete
+                    </Button>
                 </DialogActions>
             </Dialog>
 
-            <Snackbar open={Boolean(snack)} autoHideDuration={2500} onClose={() => setSnack(null)} anchorOrigin={{ vertical: "bottom", horizontal: "center" }}><Alert severity={snack?.severity} onClose={() => setSnack(null)}>{snack?.message}</Alert></Snackbar>
+            <Snackbar
+                open={Boolean(snack)}
+                autoHideDuration={2500}
+                onClose={() => setSnack(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+            >
+                <Alert severity={snack?.severity} onClose={() => setSnack(null)}>
+                    {snack?.message}
+                </Alert>
+            </Snackbar>
         </Box>
     );
 }

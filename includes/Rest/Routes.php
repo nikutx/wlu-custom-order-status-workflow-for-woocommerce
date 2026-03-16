@@ -1,17 +1,17 @@
 <?php
-namespace WLU_OW\Rest;
+namespace WEBLEVELUP_STATUS\Rest;
 
 use WP_Error;
 use WP_REST_Request;
-use WLU_OW\Plugin;
-use WLU_OW\Domain\StatusesStore;
+use WEBLEVELUP_STATUS\Plugin;
+use WEBLEVELUP_STATUS\Domain\StatusesStore;
 
 if (!defined('ABSPATH')) exit;
 
 final class Routes {
   private StatusesStore $store;
 
-  // Define Core Slugs to ignore in limits
+  // Define Core Slugs to ignore in limits (kept for utility if needed later)
   private const CORE_SLUGS = [
       'wc-pending', 'wc-processing', 'wc-on-hold',
       'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed'
@@ -66,12 +66,22 @@ final class Routes {
   private function get_live_counts(): array {
       global $wpdb;
 
+      // 1. Check cache first to prevent hammering the database
+      $cache_key = 'weblevelup_status_live_order_counts';
+      $cached = wp_cache_get($cache_key, 'weblevelup_status');
+      if ($cached !== false) {
+          return $cached;
+      }
+
       $counts = [];
       $hpos_table = $wpdb->prefix . 'wc_orders';
 
-      // Check for HPOS (High Performance Order Storage)
-      if ($wpdb->get_var("SHOW TABLES LIKE '$hpos_table'") === $hpos_table) {
-          $results = $wpdb->get_results("SELECT status, COUNT(*) as cnt FROM $hpos_table GROUP BY status", ARRAY_A);
+      // INLINED PREPARE FIX: Putting prepare directly inside get_var satisfies strict static analyzers
+      // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+      if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $hpos_table)) === $hpos_table) {
+
+          // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+          $results = $wpdb->get_results("SELECT status, COUNT(*) as cnt FROM {$wpdb->prefix}wc_orders GROUP BY status", ARRAY_A);
           if ($results) {
               foreach ($results as $row) {
                   $status = $row['status'];
@@ -81,11 +91,14 @@ final class Routes {
                   $key = 'wc-' . $status;
                   $counts[$key] = (int)$row['cnt'];
               }
+              // Cache for 60 seconds to keep UI fast but numbers relatively fresh
+              wp_cache_set($cache_key, $counts, 'weblevelup_status', 60);
               return $counts;
           }
       }
 
       // Fallback to Post Meta (Legacy)
+      // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
       $results = $wpdb->get_results(
           "SELECT post_status, COUNT(*) as cnt
            FROM {$wpdb->posts}
@@ -103,6 +116,8 @@ final class Routes {
           $counts[$key] = (int)$row['cnt'];
       }
 
+      // Cache for 60 seconds
+      wp_cache_set($cache_key, $counts, 'weblevelup_status', 60);
       return $counts;
   }
 
@@ -117,6 +132,11 @@ final class Routes {
     if (file_exists(__DIR__ . '/SettingsController.php')) {
         require_once __DIR__ . '/SettingsController.php';
         SettingsController::register_routes();
+    }
+
+    if (file_exists(__DIR__ . '/SupportController.php')) {
+        require_once __DIR__ . '/SupportController.php';
+        SupportController::register_routes();
     }
 
     // GET /ping
@@ -160,25 +180,8 @@ final class Routes {
         $in = (array)$req->get_json_params();
         $statuses = $this->store->get_all();
 
-        // --- LIMIT CHECK FIX ---
-
-        // 1. Is the incoming status a Core Status?
-        $incomingSlug = $in['slug'] ?? '';
-        $isCoreOverride = in_array($incomingSlug, self::CORE_SLUGS);
-
-        // 2. Count current CUSTOM statuses only (exclude existing core overrides)
-        $customCount = 0;
-        foreach ($statuses as $s) {
-            if (!in_array($s['slug'], self::CORE_SLUGS)) {
-                $customCount++;
-            }
-        }
-
-        // 3. Enforce Limit: Only if creating NEW CUSTOM status and limit reached
-        if (!$isCoreOverride && $customCount >= 2 && !class_exists('WLU_OW_Pro')) {
-             return new WP_Error('wlu_pro_limit', 'Free version limit reached (2 statuses). Upgrade to Pro for unlimited workflows!', ['status' => 403]);
-        }
-        // -----------------------
+        // 🚨 LIMIT CHECK DELETED HERE 🚨
+        // Free users can now create infinite custom statuses.
 
         $status = $this->store->sanitize_payload($in);
         if (empty($status['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);

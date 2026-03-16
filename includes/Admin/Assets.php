@@ -1,5 +1,5 @@
 <?php
-namespace WLU_OW\Admin;
+namespace WEBLEVELUP_STATUS\Admin;
 
 if (!defined('ABSPATH')) exit;
 
@@ -7,76 +7,61 @@ class Assets {
     public function enqueue() {
         $screen = get_current_screen();
 
-        // Only load on our plugin page
-        if (!$screen || strpos($screen->id, 'wlu-order-workflow') === false) {
+        if (!$screen || strpos($screen->id, 'wlu-custom-order-status') === false) {
             return;
         }
 
-        $version = WLU_OW_VERSION;
-        $url = WLU_OW_URL;
-        $path = WLU_OW_PATH;
+        $version = '1.0.2';
+        $url = plugin_dir_url(dirname(__FILE__, 2));
 
-        // --- SMART MODE DETECTION ---
-        if (file_exists($path . 'dist/app.js')) {
-            $is_prod = true;
-            $js_url = $url . 'dist/app.js';
-            $css_url = $url . 'dist/app.css';
-        } elseif (file_exists($path . 'dist/assets/app.js')) {
-            $is_prod = true;
-            $js_url = $url . 'dist/assets/app.js';
-            $css_url = $url . 'dist/assets/app.css';
+        // --- SMART DEV/PROD DETECTION ---
+        // Since our zip packager deletes AssetsDev.php, if it exists, we are definitely local!
+        if (file_exists(__DIR__ . '/AssetsDev.php')) {
+            require_once __DIR__ . '/AssetsDev.php';
+            \WEBLEVELUP_STATUS\Admin\AssetsDev::enqueue_vite_dev_scripts();
         } else {
-            $is_prod = false;
+            // Production Fallback: Load the compiled files
+            $js_url = $url . 'dist/main.js';
+            $css_url = $url . 'dist/main.css';
+            wp_enqueue_script('weblevelup-status-app', $js_url, ['wp-element', 'wp-i18n'], $version, true);
+            wp_enqueue_style('weblevelup-status-app', $css_url, [], $version);
         }
 
-        if ($is_prod) {
-            // --- PRODUCTION MODE ---
-            wp_enqueue_script('wlu-ow-app', $js_url, ['wp-element', 'wp-i18n'], $version, true);
-            wp_enqueue_style('wlu-ow-app', $css_url, [], $version);
-        } else {
-            // --- DEVELOPMENT MODE ---
-            add_filter('script_loader_tag', function($tag, $handle, $src) {
-                if (in_array($handle, ['wlu-ow-vite-client', 'wlu-ow-app'])) {
-                    return '<script type="module" src="' . esc_url($src) . '"></script>';
-                }
-                return $tag;
-            }, 10, 3);
-
-            // Inject React Preamble
-            add_action('admin_head', function() {
-                echo '
-                <script type="module">
-                    import RefreshRuntime from "http://dev01.local:5173/@react-refresh"
-                    RefreshRuntime.injectIntoGlobalHook(window)
-                    window.$RefreshReg$ = () => {}
-                    window.$RefreshSig$ = () => (type) => type
-                    window.__vite_plugin_react_preamble_installed__ = true
-                </script>';
-            });
-
-            wp_enqueue_script('wlu-ow-vite-client', 'http://dev01.local:5173/@vite/client', [], null, true);
-            wp_enqueue_script('wlu-ow-app', 'http://dev01.local:5173/src/main.jsx', ['wp-element'], time(), true);
-        }
-
-        // --- 3. FULL SCREEN FIX (CSS) ---
-        // This hides the default WP Title ("Custom Order Statuses...")
-        // so your React App Sidebar becomes the only header.
+        // Full screen CSS fixes
         $css = "
-            /* Hide WP Title */
             #wpbody-content > .wrap > h1 { display: none !important; }
-            /* Remove notices spacer if empty */
             .wp-header-end { display: none !important; }
-            /* Pull app up to the top */
             #wpbody-content > .wrap { margin-top: 0 !important; padding-top: 10px !important; }
+            #wpfooter { display: none !important; }
         ";
-        wp_add_inline_style('admin-bar', $css);
+        wp_add_inline_style('common', $css);
 
-        // Pass settings
-        wp_localize_script('wlu-ow-app', 'WLU_OW', [
-            'restUrl' => rest_url('wlu-ow/v1/'),
-            'nonce'   => wp_create_nonce('wp_rest'),
-            'adminEmail' => get_option('admin_email'),
-            'isPro'   => false
-        ]);
+       // --- STRICT LICENSE CHECK ---
+               $active_plugins = (array) get_option('active_plugins', []);
+               $is_pro_plugin_active = false;
+
+               // Scan the database's active plugins list for the Pro plugin
+               foreach ($active_plugins as $plugin) {
+                   if (strpos($plugin, 'wlu-workflow-pro') !== false) {
+                       $is_pro_plugin_active = true;
+                       break;
+                   }
+               }
+
+               $has_license_key = !empty(get_option('weblevelup_status_license_key'));
+
+               $is_pro = ($is_pro_plugin_active && $has_license_key) ? '1' : '0';
+
+               // Safely pass JS variables
+               wp_register_script('weblevelup-status-global-config', false);
+               wp_enqueue_script('weblevelup-status-global-config');
+               wp_localize_script('weblevelup-status-global-config', 'WEBLEVELUP_STATUS', [
+                   'restUrl'        => rest_url('weblevelup-status/v1/'),
+                   'nonce'          => wp_create_nonce('wp_rest'),
+                   'adminEmail'     => get_option('admin_email'),
+                   'isPro'          => $is_pro,
+                   'isProInstalled' => $is_pro_plugin_active ? '1' : '0',
+                   'upgradeUrl'     => 'https://weblevelup.co.uk/plugins/custom-order-status-workflow-for-woocommerce/'
+               ]);
     }
 }

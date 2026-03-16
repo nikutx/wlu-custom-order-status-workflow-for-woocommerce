@@ -1,5 +1,5 @@
 export async function wpFetch(path, init = {}) {
-    const cfg = window.WLU_OW;
+    const cfg = window.WEBLEVELUP_STATUS;
     const url = cfg.restUrl + path.replace(/^\//, "");
 
     const res = await fetch(url, {

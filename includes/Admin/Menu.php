@@ -1,7 +1,7 @@
 <?php
-namespace WLU_OW\Admin;
+namespace WEBLEVELUP_STATUS\Admin;
 
-use WLU_OW\Plugin;
+use WEBLEVELUP_STATUS\Plugin;
 
 if (!defined('ABSPATH')) exit;
 
@@ -13,8 +13,8 @@ final class Menu {
 
   public function register_menu(): void {
     add_menu_page(
-      'Custom Order Statuses for WooCommerce',
-      'Custom Statuses',
+      esc_html__('WLU Custom Order Status for WooCommerce', 'wlu-custom-order-status-workflow'),
+      esc_html__('Custom Statuses', 'wlu-custom-order-status-workflow'),
       $this->required_capability(),
       Plugin::SLUG,
       [$this, 'render_page'],
@@ -25,8 +25,9 @@ final class Menu {
 
   public function render_page(): void {
     echo '<div class="wrap">';
-    echo '<h1>Custom Order Statuses for WooCommerce</h1>';
-    echo '<div id="wlu-ow-root"></div>';
+    // Safely escaped and translatable title!
+    echo '<h1>' . esc_html__('WLU Custom Order Status for WooCommerce', 'wlu-custom-order-status-workflow') . '</h1>';
+    echo '<div id="weblevelup-status-root"></div>';
     echo '</div>';
   }
 }

@@ -5,7 +5,7 @@ import {
     Dialog, DialogTitle, DialogContent, DialogActions,
     Button, TextField, MenuItem, Stack, Typography,
     Divider, Box, useTheme, alpha, Paper, Chip, ListSubheader,
-    Input, FormHelperText // <--- Switched to raw Input
+    Input, FormHelperText
 } from "@mui/material";
 import BoltIcon from "@mui/icons-material/Bolt";
 import SendIcon from "@mui/icons-material/Send";
@@ -13,7 +13,6 @@ import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import CodeIcon from "@mui/icons-material/Code";
 import CircleIcon from "@mui/icons-material/Circle";
 
-// --- EXACT STYLE FROM OrderStatuses.jsx ---
 const inputStyle = {
     fontSize: '0.875rem',
     color: 'text.primary',
@@ -33,16 +32,26 @@ const inputStyle = {
     '&:after': { borderBottom: '2px solid #7c4dff' }
 };
 
+const CORE_DEFAULTS = [
+    { slug: 'wc-pending', label: 'Pending payment', color: '#e5e5e5' },
+    { slug: 'wc-processing', label: 'Processing', color: '#7ad03a' },
+    { slug: 'wc-on-hold', label: 'On hold', color: '#ffba00' },
+    { slug: 'wc-completed', label: 'Completed', color: '#2ea2cc' },
+    { slug: 'wc-cancelled', label: 'Cancelled', color: '#a00000' },
+    { slug: 'wc-refunded', label: 'Refunded', color: '#b3afaf' },
+    { slug: 'wc-failed', label: 'Failed', color: '#d9534f' }
+];
+
 export default function RuleEditorDialog({ open, onClose, onSave, initialData, statuses }) {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
 
-    // --- STATE ---
     const [form, setForm] = useState({
         name: "",
         trigger_type: "order_status_change",
         trigger_value: "",
         action_type: "send_email",
+        is_active: true, // <--- NEW: Auto-enable on creation!
         action_payload: {
             to: "customer",
             custom_email: "",
@@ -54,7 +63,7 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
 
     const [errors, setErrors] = useState({});
 
-    // --- LOAD DATA ---
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         if (open) {
             setErrors({});
@@ -71,6 +80,7 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
                     trigger_type: "order_status_change",
                     trigger_value: "",
                     action_type: "send_email",
+                    is_active: true, // <--- NEW: Auto-enable on creation!
                     action_payload: {
                         to: "customer", custom_email: "",
                         subject: "Order #{order_number} Update",
@@ -82,7 +92,6 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
         }
     }, [open, initialData]);
 
-    // --- HANDLERS ---
     const handleChange = (field, value) => {
         setForm(prev => ({ ...prev, [field]: value }));
         if (errors[field]) setErrors(prev => ({ ...prev, [field]: null }));
@@ -99,23 +108,34 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
+
+            // 🚨 THE AUTO-SCROLL FIX 🚨
+            // If the name is missing, scroll up and focus the input automatically!
+            if (newErrors.name) {
+                setTimeout(() => {
+                    const nameInput = document.getElementById('rule-name-input');
+                    if (nameInput) {
+                        nameInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        nameInput.focus();
+                    }
+                }, 50);
+            }
+
             return;
         }
         onSave(form);
     };
 
-    // --- STATUS OPTIONS LOGIC ---
-    const customStatuses = statuses || [];
-    const coreStatuses = [
-        { slug: 'pending', label: 'Pending payment', color: '#e5e5e5' },
-        { slug: 'processing', label: 'Processing', color: '#7ad03a' },
-        { slug: 'on-hold', label: 'On hold', color: '#ffba00' },
-        { slug: 'completed', label: 'Completed', color: '#2ea2cc' },
-        { slug: 'cancelled', label: 'Cancelled', color: '#a00' },
-        { slug: 'refunded', label: 'Refunded', color: '#b3afaf' },
-        { slug: 'failed', label: 'Failed', color: '#d9534f' }
-    ];
-    const filteredCore = coreStatuses.filter(core => !customStatuses.some(c => c.slug === core.slug));
+    const rawStatuses = statuses || [];
+
+    const customStatuses = rawStatuses.filter(s =>
+        !CORE_DEFAULTS.some(core => core.slug === s.slug || core.slug === `wc-${s.slug}`)
+    );
+
+    const finalCoreStatuses = CORE_DEFAULTS.map(core => {
+        const override = rawStatuses.find(s => s.slug === core.slug || `wc-${s.slug}` === core.slug);
+        return override ? { ...core, label: override.label, color: override.color || override.colour } : core;
+    });
 
     const renderStatusItem = (label, color) => (
         <Stack direction="row" alignItems="center" spacing={1.5}>
@@ -124,7 +144,6 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
         </Stack>
     );
 
-    // Style for the "Dividers" (Headers)
     const headerStyle = {
         lineHeight: '32px',
         fontWeight: 700,
@@ -141,15 +160,13 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
             </DialogTitle>
 
             <DialogContent sx={{ p: 3, bgcolor: 'background.paper' }}>
-
                 <Stack spacing={0}>
-
-                    {/* 1. RULE NAME (Now using Raw Input) */}
                     <Box sx={{ mb: 4, mt: 1 }}>
                         <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                             RULE NAME
                         </Typography>
                         <Input
+                            id="rule-name-input"
                             placeholder="e.g. Send 'Thank You' email when Completed"
                             fullWidth
                             value={form.name}
@@ -160,7 +177,6 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
                         {errors.name && <FormHelperText error>{errors.name}</FormHelperText>}
                     </Box>
 
-                    {/* 2. TRIGGER SECTION */}
                     <Paper variant="outlined" sx={{ p: 2, pb: 3, bgcolor: alpha(theme.palette.primary.main, 0.04), borderColor: alpha(theme.palette.primary.main, 0.2), borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderBottom: 'none' }}>
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2, color: 'primary.main' }}>
                             <BoltIcon fontSize="small" />
@@ -192,22 +208,30 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
                                 sx={{ '& .MuiInput-underline:before': { borderBottom: '1px solid rgba(150,150,150,0.42)' } }}
                             >
                                 <MenuItem value="" disabled>Select Status...</MenuItem>
+
                                 {customStatuses.length > 0 && <ListSubheader sx={headerStyle}>YOUR CUSTOM STATUSES</ListSubheader>}
-                                {customStatuses.map(s => <MenuItem key={s.slug} value={s.slug}>{renderStatusItem(s.label, s.color || s.colour)}</MenuItem>)}
+                                {customStatuses.map(s =>
+                                    <MenuItem key={s.slug} value={s.slug}>
+                                        {renderStatusItem(s.label, s.color || s.colour)}
+                                    </MenuItem>
+                                )}
+
                                 <ListSubheader sx={headerStyle}>WOOCOMMERCE CORE</ListSubheader>
-                                {filteredCore.map(s => <MenuItem key={s.slug} value={s.slug}>{renderStatusItem(s.label, s.color)}</MenuItem>)}
+                                {finalCoreStatuses.map(s =>
+                                    <MenuItem key={s.slug} value={s.slug}>
+                                        {renderStatusItem(s.label, s.color)}
+                                    </MenuItem>
+                                )}
                             </TextField>
                         </Stack>
                     </Paper>
 
-                    {/* CONNECTOR ARROW */}
                     <Box sx={{ display: 'flex', justifyContent: 'center', zIndex: 1, my: -1.5 }}>
                         <Box sx={{ bgcolor: 'background.paper', p: 0.5, borderRadius: '50%', border: 1, borderColor: 'divider', boxShadow: 1 }}>
                             <ArrowDownwardIcon color="action" fontSize="small" />
                         </Box>
                     </Box>
 
-                    {/* 3. ACTION SECTION */}
                     <Paper variant="outlined" sx={{ p: 2, pt: 3, bgcolor: alpha(theme.palette.secondary.main, 0.04), borderColor: alpha(theme.palette.secondary.main, 0.2), borderTopLeftRadius: 0, borderTopRightRadius: 0 }}>
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2, color: 'secondary.main' }}>
                             <SendIcon fontSize="small" />
@@ -226,7 +250,6 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
                             <MenuItem value="send_email">Send an Email</MenuItem>
                         </TextField>
 
-                        {/* EMAIL CONFIG */}
                         <Box sx={{
                             p: 2,
                             borderRadius: 1,
@@ -259,7 +282,6 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
                                     />
                                 )}
 
-                                {/* SUBJECT LINE (Now using Raw Input) */}
                                 <Box>
                                     <Typography variant="caption" color="text.secondary">Subject Line</Typography>
                                     <Input
@@ -283,7 +305,6 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
                                     />
                                 </Box>
 
-                                {/* VARIABLE CHIPS */}
                                 <Box sx={{ pt: 1 }}>
                                     <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                         <CodeIcon fontSize="inherit" /> AVAILABLE VARIABLES
@@ -316,7 +337,7 @@ export default function RuleEditorDialog({ open, onClose, onSave, initialData, s
 
             <DialogActions sx={{ p: 2 }}>
                 <Button onClick={onClose} color="inherit" sx={{ fontWeight: 600 }}>Cancel</Button>
-                <Button onClick={handleSubmit} variant="contained" color="primary" sx={{ fontWeight: 700, px: 3 }}>
+                <Button onClick={handleSubmit} variant="contained" color="primary" sx={{ fontWeight: 700, px: 3, '&:hover': { color: '#ffffff' } }}>
                     {initialData ? "Update Automation" : "Create Automation"}
                 </Button>
             </DialogActions>

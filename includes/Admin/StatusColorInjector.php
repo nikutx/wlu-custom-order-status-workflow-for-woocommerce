@@ -1,7 +1,9 @@
 <?php
-namespace WLU_OW\Admin;
+namespace WEBLEVELUP_STATUS\Admin;
 
-use WLU_OW\Domain\StatusesStore;
+use WEBLEVELUP_STATUS\Domain\StatusesStore;
+
+if (!defined('ABSPATH')) exit;
 
 class StatusColorInjector {
     private $store;
@@ -11,7 +13,8 @@ class StatusColorInjector {
     }
 
     public function init() {
-        add_action('admin_head', [$this, 'inject_css']);
+        // Correct WordPress hook for enqueuing admin styles
+        add_action('admin_enqueue_scripts', [$this, 'inject_css']);
     }
 
     public function inject_css() {
@@ -21,41 +24,35 @@ class StatusColorInjector {
             return;
         }
 
-        // --- 1. SETTINGS CHECK (Fixed) ---
-
-        // We use 'wlu_ow_options' because that is what SettingsController.php uses.
-        $settings = get_option('wlu_ow_options', []);
-
-        // We check 'enableAdminColors' because that is the key your React app saves.
-        // Default to TRUE so colors work out-of-the-box before settings are saved.
+        // --- 1. SETTINGS CHECK ---
+        $settings = get_option('weblevelup_status_options', []);
         $is_enabled = isset($settings['enableAdminColors']) ? (bool)$settings['enableAdminColors'] : true;
 
-        // If disabled, stop here.
         if ( ! $is_enabled ) {
             return;
         }
 
-        // --- 2. INJECT CSS ---
-
+        // --- 2. GENERATE DYNAMIC CSS ---
         $statuses = $this->store->get_all();
+        $custom_css = '';
 
-        echo '<style type="text/css">';
         foreach ($statuses as $status) {
             if (empty($status['color'])) continue;
 
-            // Strip 'wc-' prefix to match WooCommerce CSS classes
-            $css_slug = str_replace('wc-', '', $status['slug']);
+            $css_slug = sanitize_html_class(str_replace('wc-', '', $status['slug']));
             $color = esc_attr($status['color']);
 
-            echo ".order-status.status-{$css_slug} {";
-            echo "background: {$color} !important;";
-            echo "color: #ffffff !important;"; // Force white text for contrast
-            echo "}";
-
-            echo ".order-status.status-{$css_slug} span {";
-            echo "color: #ffffff !important;";
-            echo "}";
+            // Safely build the CSS string
+            $custom_css .= ".order-status.status-{$css_slug} { background: {$color} !important; color: #ffffff !important; }\n";
+            $custom_css .= ".order-status.status-{$css_slug} span { color: #ffffff !important; }\n";
         }
-        echo '</style>';
+
+        // --- 3. ENQUEUE THE CSS PROPERLY ---
+        if (!empty($custom_css)) {
+            // Registering a style with 'false' as the source is the official WP way to handle purely dynamic inline styles.
+            wp_register_style('weblevelup-status-admin-status-colors', false);
+            wp_enqueue_style('weblevelup-status-admin-status-colors');
+            wp_add_inline_style('weblevelup-status-admin-status-colors', $custom_css);
+        }
     }
 }

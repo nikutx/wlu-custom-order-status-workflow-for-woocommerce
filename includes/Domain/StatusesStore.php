@@ -1,10 +1,10 @@
 <?php
-namespace WLU_OW\Domain;
+namespace WEBLEVELUP_STATUS\Domain;
 
 if (!defined('ABSPATH')) exit;
 
 final class StatusesStore {
-  private const OPT_STATUSES = 'wlu_ow_order_statuses';
+  private const OPT_STATUSES = 'weblevelup_status_order_statuses';
 
   public function get_all(): array {
     $raw = get_option(self::OPT_STATUSES, []);

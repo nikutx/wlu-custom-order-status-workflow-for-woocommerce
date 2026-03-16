@@ -1,6 +1,6 @@
 // assets/admin-app/src/api/rules.js
 
-const getSettings = () => window.WLU_OW || {};
+const getSettings = () => window.WEBLEVELUP_STATUS || {};
 
 export const RulesAPI = {
     /**

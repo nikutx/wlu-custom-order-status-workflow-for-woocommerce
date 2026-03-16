@@ -1,7 +1,7 @@
 <?php
-namespace WLU_OW\Frontend;
+namespace WEBLEVELUP_STATUS\Frontend;
 
-use WLU_OW\Domain\StatusesStore;
+use WEBLEVELUP_STATUS\Domain\StatusesStore;
 
 if (!defined('ABSPATH')) exit;
 
@@ -16,8 +16,8 @@ class CustomerStatusDisplay {
         // FIX: this is an Action, not a Filter. It receives 1 argument: $order
         add_action('woocommerce_my_account_my_orders_column_order-status', [$this, 'output_status_badge'], 10, 1);
 
-        // Hook to inject CSS
-        add_action('wp_head', [$this, 'inject_frontend_css']);
+        // Hook to inject CSS properly using the standard frontend script enqueuer
+        add_action('wp_enqueue_scripts', [$this, 'inject_frontend_css']);
     }
 
     /**
@@ -58,11 +58,10 @@ class CustomerStatusDisplay {
         }
 
         $statuses = $this->store->get_all();
-
-        echo '<style type="text/css">';
+        $custom_css = '';
 
         // A. Base Badge Styles (The "Pill" Shape)
-        echo '
+        $custom_css .= "
             .wlu-status-badge {
                 display: inline-block;
                 padding: 4px 12px;
@@ -71,30 +70,35 @@ class CustomerStatusDisplay {
                 font-weight: 600;
                 line-height: 1.5;
                 text-align: center;
-                background: #e5e5e5; /* Fallback */
+                background: #e5e5e5;
                 color: #333;
                 white-space: nowrap;
             }
-        ';
+        ";
 
         // B. Dynamic Colors
         foreach ($statuses as $status) {
             if (empty($status['color'])) continue;
 
-            $css_slug = str_replace('wc-', '', $status['slug']);
+            // Sanitize the slug for safe CSS class output
+            $css_slug = sanitize_html_class(str_replace('wc-', '', $status['slug']));
             $color = esc_attr($status['color']);
 
             // Note: We use !important to ensure theme styles don't override our badge
-            echo ".wlu-status-badge.status-{$css_slug} {";
-            echo "background-color: {$color} !important;";
-            echo "color: #ffffff !important;"; // Always white text for contrast
-            echo "}";
+            $custom_css .= ".wlu-status-badge.status-{$css_slug} { background-color: {$color} !important; color: #ffffff !important; }\n";
         }
-        echo '</style>';
+
+        // C. Enqueue the compiled CSS string
+        if (!empty($custom_css)) {
+            // Register a dummy handle, then attach our dynamic inline styles to it
+            wp_register_style('weblevelup-status-frontend-status-colors', false);
+            wp_enqueue_style('weblevelup-status-frontend-status-colors');
+            wp_add_inline_style('weblevelup-status-frontend-status-colors', $custom_css);
+        }
     }
 
     private function is_enabled(): bool {
-        $settings = get_option('wlu_ow_options', []);
+        $settings = get_option('weblevelup_status_options', []);
         return isset($settings['enableFrontendColors']) ? (bool)$settings['enableFrontendColors'] : true;
     }
 }
