@@ -42,15 +42,17 @@ class Assets {
                    'restUrl'       => rest_url('weblevelup-status/v1/'),
                    'nonce'         => wp_create_nonce('wp_rest'),
                    'adminEmail'    => get_option('admin_email'),
-                   'proTabs'       => apply_filters('wlu_workflow_pro_tabs', []),
 
-                   // 🚨 THE OPEN DOOR: Let Pro inject rule counts here!
-                   'proUsageStats' => apply_filters('wlu_free_localized_usage_stats', [])
+                   // 🚨 CHANGED: Using the full prefix here!
+                   'proTabs'       => apply_filters('weblevelup_status_pro_tabs', []),
+
+                   // 🚨 CHANGED: Using the full prefix here!
+                   'proUsageStats' => apply_filters('weblevelup_status_localized_usage_stats', [])
                ];
 
         // Safely pass JS variables
-                wp_register_script('weblevelup-status-global-config', false);
-                wp_enqueue_script('weblevelup-status-global-config');
-                wp_localize_script('weblevelup-status-global-config', 'WEBLEVELUP_STATUS', $config);
+        wp_register_script('weblevelup-status-global-config', false);
+        wp_enqueue_script('weblevelup-status-global-config');
+        wp_localize_script('weblevelup-status-global-config', 'WEBLEVELUP_STATUS', $config);
     }
 }
