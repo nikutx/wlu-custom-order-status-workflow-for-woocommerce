@@ -5,26 +5,18 @@ import {
     CssBaseline, Stack, alpha
 } from "@mui/material";
 
-// --- ICONS ---
-import LockIcon from "@mui/icons-material/Lock";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import BoltIcon from "@mui/icons-material/Bolt";
 import CodeIcon from "@mui/icons-material/Code";
 
-// --- PAGES ---
 import OrderStatusesPage from "./pages/OrderStatuses/OrderStatuses.jsx";
-import WorkflowRulesPage from "./pages/WorkflowRules/WorkflowRules.jsx";
-import ActivityLogsPage from "./pages/ActivityLogs/ActivityLogsPage.jsx";
-import SupportPage from "./pages/Support/SupportPage.jsx";
 import SettingsPage from "./pages/Settings/SettingsPage.jsx";
-
+import UpgradePage from "./pages/Upgrade/UpgradePage.jsx";
+import { WLUBus, WLU_EVENTS } from './utils/EventBus';
 export default function App() {
-    // --- 1. DETECT DEV MODE ---
     const isDev = import.meta.env.DEV;
-    const isPro = window.WEBLEVELUP_STATUS?.isPro === true || window.WEBLEVELUP_STATUS?.isPro === "1";
 
-    // --- 2. THEME ENGINE (Defaulting to Light Mode) ---
     const [mode, setMode] = useState(() => localStorage.getItem("wlu_theme") || "light");
 
     const toggleTheme = () => {
@@ -49,55 +41,80 @@ export default function App() {
         components: { MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } } }
     }), [mode]);
 
-    // --- 3. MENU CONFIG ---
-    const menu = useMemo(() => [
-        { key: "statuses", label: "Order Statuses" },
-        // 🚨 ADDED THE PADLOCK LOGIC HERE 🚨
-        { key: "workflow", label: "Workflow Rules", locked: !isPro },
-        { key: "logs", label: "Activity Logs", locked: !isPro },
-        { key: "support", label: "Premium Support", locked: !isPro },
-        { key: "settings", label: "Settings" },
-    ], [isPro]);
+    // Make sure proTabs doesn't trigger endless re-renders
+    const proTabs = useMemo(() => window.WEBLEVELUP_STATUS?.proTabs || [], []);
 
-    // --- 4. HASH ROUTING ENGINE ---
-    // Helper to read the current URL hash, defaulting to "statuses"
-    const getHashTab = () => {
-        const hash = window.location.hash.replace("#/", "").replace("#", "");
-        const validKeys = menu.map(m => m.key);
-        return validKeys.includes(hash) ? hash : "statuses";
-    };
+    const menu = useMemo(() => {
+        const baseMenu = [
+            { key: "statuses", label: "Order Statuses" },
+            ...proTabs,
+            { key: "settings", label: "Settings" },
+        ];
 
-    const [active, setActive] = useState(getHashTab());
+        if (proTabs.length === 0) {
+            baseMenu.splice(1, 0, { key: "upgrade", label: "🌟 Get Pro" });
+        }
 
-    // Listen for browser Back/Forward button clicks to update the active tab
+        return baseMenu;
+    }, [proTabs]);
+
+    // --- BULLETPROOF HASH ROUTING ---
+    const [active, setActive] = useState(() => {
+        const hash = window.location.hash.replace(/^#\/?/, "");
+        return hash || "statuses";
+    });
+
     useEffect(() => {
-        const handleHashChange = () => setActive(getHashTab());
-        window.addEventListener("hashchange", handleHashChange);
-        return () => window.removeEventListener("hashchange", handleHashChange);
-    }, []);
+        const validKeys = menu.map(m => m.key);
 
-    // Custom nav handler: updates React state AND the URL bar
+        const handleHashChange = () => {
+            const hash = window.location.hash.replace(/^#\/?/, "");
+            let newActiveTab = "statuses"; // Default fallback
+
+            if (validKeys.includes(hash)) {
+                newActiveTab = hash;
+            }
+
+            setActive(newActiveTab);
+
+            // 🚨 THE SHOUT: Tell the Pro plugin the URL hash just changed!
+            // We send the exact hash key (e.g., 'workflow') so the Pro plugin knows if it's visible.
+            WLUBus.shout(WLU_EVENTS.TAB_CHANGED, { activeTab: newActiveTab });
+        };
+
+        window.addEventListener("hashchange", handleHashChange);
+
+        // Run once on mount to ensure URL matches state
+        handleHashChange();
+
+        return () => window.removeEventListener("hashchange", handleHashChange);
+    }, [menu]);
+
+
+
     const handleNavChange = (key) => {
+        // 1. Update the React state immediately for a snappy UI
         setActive(key);
-        window.location.hash = `/${key}`;
+
+        // 2. Update the URL bar silently (this bypasses the strict linter!)
+        window.history.pushState(null, "", `#/${key}`);
+
+        // 3. 🚨 THE SHOUT: Tell the Pro plugin right away
+        WLUBus.shout(WLU_EVENTS.TAB_CHANGED, { activeTab: key });
     };
 
-    // --- RENDER ---
     return (
         <ThemeProvider theme={theme}>
             <CssBaseline />
 
-            {/* MAIN LAYOUT CONTAINER */}
             <Box sx={{
                 display: "flex", height: "calc(100vh - 50px)",
                 backgroundColor: "background.default", borderRadius: 2,
                 overflow: "hidden", border: 1, borderColor: "divider", mt: 2, mr: 2
             }}>
 
-                {/* --- SIDEBAR (Fixed) --- */}
                 <Paper elevation={0} sx={{ width: 260, flexShrink: 0, borderRight: 1, borderColor: "divider", display: "flex", flexDirection: "column", borderRadius: 0, zIndex: 2 }}>
 
-                    {/* BRANDING AREA */}
                     <Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                         <Box sx={{ width: 36, height: 36, bgcolor: 'primary.main', borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 4px 12px rgba(124, 77, 255, 0.3)' }}>
                             <BoltIcon />
@@ -109,20 +126,16 @@ export default function App() {
                     </Box>
                     <Divider />
 
-                    {/* NAVIGATION */}
                     <List sx={{ flex: 1, px: 2, py: 2, overflowY: 'auto' }}>
                         {menu.map((item) => {
-                            const isLocked = item.locked;
                             const isSelected = active === item.key;
-
-                            const button = (
+                            return (
                                 <ListItemButton
                                     key={item.key}
                                     selected={isSelected}
                                     onClick={() => handleNavChange(item.key)}
                                     sx={{
-                                        borderRadius: 1,
-                                        mb: 0.5,
+                                        borderRadius: 1, mb: 0.5,
                                         '&.Mui-selected': {
                                             bgcolor: alpha(theme.palette.primary.main, 0.08),
                                             borderLeft: '4px solid',
@@ -135,15 +148,11 @@ export default function App() {
                                         primary={item.label}
                                         primaryTypographyProps={{ fontWeight: isSelected ? 700 : 500, fontSize: '0.9rem' }}
                                     />
-                                    {isLocked && <LockIcon fontSize="small" sx={{ color: 'text.disabled', fontSize: 16 }} />}
                                 </ListItemButton>
                             );
-
-                            return button;
                         })}
                     </List>
 
-                    {/* DEV MODE INDICATOR */}
                     {isDev && (
                         <Box sx={{ px: 2, pb: 2 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, bgcolor: alpha(theme.palette.error.main, 0.1), color: 'error.main', border: '1px solid', borderColor: alpha(theme.palette.error.main, 0.2), borderRadius: 1, p: 1 }}>
@@ -154,7 +163,6 @@ export default function App() {
                     )}
                     <Divider />
 
-                    {/* FOOTER */}
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ p: 2 }}>
                         <Typography variant="caption" color="text.secondary">Appearance</Typography>
                         <IconButton onClick={toggleTheme} size="small">
@@ -163,14 +171,17 @@ export default function App() {
                     </Stack>
                 </Paper>
 
-                {/* --- CONTENT AREA --- */}
                 <Box sx={{ flex: 1, display: "flex", flexDirection: "column", position: 'relative', overflow: "hidden" }}>
                     <Box sx={{ p: 4, overflowY: "auto", height: "100%", scrollBehavior: 'smooth' }}>
+
                         {active === "statuses" && <OrderStatusesPage />}
-                        {active === "workflow" && <WorkflowRulesPage />}
-                        {active === "logs" && <ActivityLogsPage />}
-                        {active === "support" && <SupportPage />}
                         {active === "settings" && <SettingsPage />}
+                        {active === "upgrade" && <UpgradePage />}
+
+                        {proTabs.map(tab => (
+                            <Box key={tab.key} id={`wlu-pro-page-${tab.key}`} sx={{ display: active === tab.key ? 'block' : 'none' }}></Box>
+                        ))}
+
                         <Box sx={{ height: 100 }} />
                     </Box>
                 </Box>

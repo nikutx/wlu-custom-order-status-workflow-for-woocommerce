@@ -11,12 +11,6 @@ if (!defined('ABSPATH')) exit;
 final class Routes {
   private StatusesStore $store;
 
-  // Define Core Slugs to ignore in limits (kept for utility if needed later)
-  private const CORE_SLUGS = [
-      'wc-pending', 'wc-processing', 'wc-on-hold',
-      'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed'
-  ];
-
   public function __construct(StatusesStore $store) {
     $this->store = $store;
   }
@@ -76,7 +70,7 @@ final class Routes {
       $counts = [];
       $hpos_table = $wpdb->prefix . 'wc_orders';
 
-      // INLINED PREPARE FIX: Putting prepare directly inside get_var satisfies strict static analyzers
+      // INLINED PREPARE FIX
       // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
       if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $hpos_table)) === $hpos_table) {
 
@@ -91,7 +85,6 @@ final class Routes {
                   $key = 'wc-' . $status;
                   $counts[$key] = (int)$row['cnt'];
               }
-              // Cache for 60 seconds to keep UI fast but numbers relatively fresh
               wp_cache_set($cache_key, $counts, 'weblevelup_status', 60);
               return $counts;
           }
@@ -116,27 +109,16 @@ final class Routes {
           $counts[$key] = (int)$row['cnt'];
       }
 
-      // Cache for 60 seconds
       wp_cache_set($cache_key, $counts, 'weblevelup_status', 60);
       return $counts;
   }
 
   public function register(): void {
 
-    // Register Sub-Controllers
-    if (file_exists(__DIR__ . '/WorkflowRulesController.php')) {
-        require_once __DIR__ . '/WorkflowRulesController.php';
-        WorkflowRulesController::register_routes();
-    }
-
+    // Register Free Settings Controller
     if (file_exists(__DIR__ . '/SettingsController.php')) {
         require_once __DIR__ . '/SettingsController.php';
         SettingsController::register_routes();
-    }
-
-    if (file_exists(__DIR__ . '/SupportController.php')) {
-        require_once __DIR__ . '/SupportController.php';
-        SupportController::register_routes();
     }
 
     // GET /ping
@@ -180,9 +162,6 @@ final class Routes {
         $in = (array)$req->get_json_params();
         $statuses = $this->store->get_all();
 
-        // 🚨 LIMIT CHECK DELETED HERE 🚨
-        // Free users can now create infinite custom statuses.
-
         $status = $this->store->sanitize_payload($in);
         if (empty($status['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);
 
@@ -220,15 +199,30 @@ final class Routes {
             }
           }
 
-          if ($foundIndex === null) return new WP_Error('wlu_not_found', 'Status not found', ['status' => 404]);
+          // 🚨 THE UPSERT FIX 🚨
+          if ($foundIndex === null) {
+              $updated = $this->store->sanitize_payload($in);
+              $updated['id'] = $id; // Keep the ID React generated
 
-          $updated = $this->store->sanitize_payload($in, $existing);
-          $updated['id'] = $id;
-          if (empty($updated['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);
+              if (empty($updated['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);
 
-          $updated['slug'] = $existing['slug']; // Prevent slug changes on update
+              $slug = (string)($updated['slug'] ?? '');
+              $slug = $this->slugify($slug);
+              if ($slug === '') $slug = $this->slugify((string)$updated['label']);
+              if ($slug === '') return new WP_Error('wlu_invalid', 'could not generate slug', ['status' => 400]);
 
-          $statuses[$foundIndex] = $updated;
+              $updated['slug'] = $this->uniqueify_slug($statuses, $slug);
+              $statuses[] = $updated;
+          } else {
+              $updated = $this->store->sanitize_payload($in, $existing);
+              $updated['id'] = $id;
+
+              if (empty($updated['label'])) return new WP_Error('wlu_invalid', 'label is required', ['status' => 400]);
+
+              $updated['slug'] = $existing['slug']; // Prevent slug changes on update
+              $statuses[$foundIndex] = $updated;
+          }
+
           $this->store->save_all($statuses);
           return rest_ensure_response($updated);
         },
@@ -250,19 +244,30 @@ final class Routes {
           }
           if (!$target) return new WP_Error('wlu_not_found', 'Status not found', ['status' => 404]);
 
-          if (!empty($reassignTo)) {
-              $oldKey = $this->store->wc_key_from_slug($target['slug']);
-              $newKey = sanitize_key($reassignTo);
+          $oldKey = $this->store->wc_key_from_slug($target['slug']); // Grab the slug before we delete!
 
-              $orders = wc_get_orders(['status' => $oldKey, 'limit' => -1, 'return' => 'ids']);
-              foreach($orders as $oid) {
-                  $ord = wc_get_order($oid);
-                  $ord->update_status($newKey, 'WLU Reassigned from ' . $target['label']);
-              }
-          }
+          if (!empty($reassignTo)) {
+                        $newKey = sanitize_key($reassignTo);
+                        $orders = wc_get_orders(['status' => $oldKey, 'limit' => -1, 'return' => 'ids']);
+
+                        // 🚨 PRESS THE MUTE BUTTON 🚨
+                        // Tell any listening plugins to ignore the status changes we are about to make
+                        add_filter('weblevelup_status_mute_rules', '__return_true');
+
+                        foreach($orders as $oid) {
+                            $ord = wc_get_order($oid);
+                            $ord->update_status($newKey, 'WLU Reassigned from ' . $target['label']);
+                        }
+
+                        // 🚨 RELEASE THE MUTE BUTTON 🚨
+                        remove_filter('weblevelup_status_mute_rules', '__return_true');
+                    }
 
           $statuses = array_values(array_filter($statuses, fn($s) => (string)($s['id'] ?? '') !== $id));
           $this->store->save_all($statuses);
+
+          // 🚨 THE SHOUT: Tell the rest of WordPress that this status was deleted/reassigned! 🚨
+          do_action('weblevelup_status_deleted', $oldKey, $reassignTo);
 
           return rest_ensure_response(['ok' => true, 'id' => $id]);
         },

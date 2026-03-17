@@ -36,32 +36,21 @@ class Assets {
         ";
         wp_add_inline_style('common', $css);
 
-       // --- STRICT LICENSE CHECK ---
-               $active_plugins = (array) get_option('active_plugins', []);
-               $is_pro_plugin_active = false;
+        // --- SAFE CONFIGURATION ---
+        // We use apply_filters() so the Pro plugin can securely inject its navigation tabs!
+       $config = [
+                   'restUrl'       => rest_url('weblevelup-status/v1/'),
+                   'nonce'         => wp_create_nonce('wp_rest'),
+                   'adminEmail'    => get_option('admin_email'),
+                   'proTabs'       => apply_filters('wlu_workflow_pro_tabs', []),
 
-               // Scan the database's active plugins list for the Pro plugin
-               foreach ($active_plugins as $plugin) {
-                   if (strpos($plugin, 'wlu-workflow-pro') !== false) {
-                       $is_pro_plugin_active = true;
-                       break;
-                   }
-               }
+                   // 🚨 THE OPEN DOOR: Let Pro inject rule counts here!
+                   'proUsageStats' => apply_filters('wlu_free_localized_usage_stats', [])
+               ];
 
-               $has_license_key = !empty(get_option('weblevelup_status_license_key'));
-
-               $is_pro = ($is_pro_plugin_active && $has_license_key) ? '1' : '0';
-
-               // Safely pass JS variables
-               wp_register_script('weblevelup-status-global-config', false);
-               wp_enqueue_script('weblevelup-status-global-config');
-               wp_localize_script('weblevelup-status-global-config', 'WEBLEVELUP_STATUS', [
-                   'restUrl'        => rest_url('weblevelup-status/v1/'),
-                   'nonce'          => wp_create_nonce('wp_rest'),
-                   'adminEmail'     => get_option('admin_email'),
-                   'isPro'          => $is_pro,
-                   'isProInstalled' => $is_pro_plugin_active ? '1' : '0',
-                   'upgradeUrl'     => 'https://weblevelup.co.uk/plugins/custom-order-status-workflow-for-woocommerce/'
-               ]);
+        // Safely pass JS variables
+                wp_register_script('weblevelup-status-global-config', false);
+                wp_enqueue_script('weblevelup-status-global-config');
+                wp_localize_script('weblevelup-status-global-config', 'WEBLEVELUP_STATUS', $config);
     }
 }

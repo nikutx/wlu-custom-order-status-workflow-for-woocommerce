@@ -28,15 +28,6 @@ define('WEBLEVELUP_STATUS_FILE', __FILE__);
 define('WEBLEVELUP_STATUS_PATH', plugin_dir_path(__FILE__));
 define('WEBLEVELUP_STATUS_URL', plugin_dir_url(__FILE__));
 
-// --- SMART ENVIRONMENT HUB DETECTION ---
-// If the compiled React files exist, we are in Production!
-if (file_exists(WEBLEVELUP_STATUS_PATH . 'dist/main.js')) {
-    define('WEBLEVELUP_STATUS_HUB_URL', 'https://weblevelup.co.uk');
-} else {
-    // If not, we are running local Vite Development mode!
-    define('WEBLEVELUP_STATUS_HUB_URL', 'http://wlu-commerce.local');
-}
-
 require_once WEBLEVELUP_STATUS_PATH . 'includes/Plugin.php';
 
 // --- 1. ACTIVATION HOOK ---
@@ -44,8 +35,11 @@ register_activation_hook(__FILE__, function () {
     // Only run the database installer if WooCommerce is actually active
     if (class_exists('WooCommerce')) {
         \WEBLEVELUP_STATUS\Plugin::init();
-        require_once WEBLEVELUP_STATUS_PATH . 'includes/Infrastructure/Installer.php';
-        \WEBLEVELUP_STATUS\Infrastructure\Installer::install();
+
+        if (file_exists(WEBLEVELUP_STATUS_PATH . 'includes/Infrastructure/Installer.php')) {
+            require_once WEBLEVELUP_STATUS_PATH . 'includes/Infrastructure/Installer.php';
+            \WEBLEVELUP_STATUS\Infrastructure\Installer::install();
+        }
         flush_rewrite_rules();
     }
 });
@@ -66,7 +60,6 @@ add_action('plugins_loaded', function() {
 
 // --- ADD SETTINGS LINK TO PLUGIN LIST ---
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function($links) {
-    // Uses the correctly updated slug!
     $settings_link = '<a href="' . admin_url('admin.php?page=wlu-custom-order-status-workflow#/settings') . '">Settings</a>';
     $pro_link = '<a href="https://weblevelup.co.uk/plugins/custom-order-status-woocommerce" target="_blank" style="color:#2271b1;font-weight:bold;">Go Pro</a>';
 

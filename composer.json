@@ -1,5 +1,5 @@
 {
-    "name": "nikut/wlu-custom-order-status-workflow-for-woocommerce",
+    "name": "weblevelup/wlu-custom-order-status-workflow",
     "autoload": {
         "psr-4": {
             "WEBLEVELUP_STATUS\\": "includes/"
@@ -10,17 +10,5 @@
             "name": "Petras Newman-Predko",
             "email": "contact@weblevelup.co.uk"
         }
-    ],
-    "repositories": [
-        {
-            "type": "path",
-            "url": "C:/codePlayground/WEBLEVELUP_SDK",
-            "options": {
-                "symlink": false
-            }
-        }
-    ],
-    "require": {
-        "wlu/sdk": "*@dev"
-    }
+    ]
 }

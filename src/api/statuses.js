@@ -1,4 +1,4 @@
-import { wpFetch } from "./wp";
+import { wpFetch } from "./wp.js";
 
 export const StatusesAPI = {
     list: () => wpFetch("statuses", { method: "GET" }),

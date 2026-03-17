@@ -15,19 +15,20 @@ Create custom WooCommerce order statuses, inject beautiful status colors, and or
 == Description ==
 
 Are the default WooCommerce order statuses ("Processing", "Completed", "On Hold") not enough for your unique fulfillment process?
-**WLU Custom Order Status for WooCommerce** allows you to build a tailor-made order management system.
 
-Easily create new custom order statuses and inject beautiful status colors into your WooCommerce admin. Visually manage your fulfillment pipeline at a glance and keep your customers informed with elegant frontend colored status pills!
+WLU Custom Order Status for WooCommerce allows you to build a tailor-made order management system. Easily create new custom order statuses and inject beautiful status colors into your WooCommerce admin. Visually manage your fulfillment pipeline at a glance and keep your customers informed with elegant frontend colored status pills!
 
-### 🚀 Core Features:
+### 🚀 Core Features
+
 * **Create Custom Statuses:** Add brand new custom order statuses tailored to your exact workflow (e.g., "Awaiting Shipment", "Manufacturing", "Ready for Pickup").
 * **Admin Color Injection:** Assign custom colors to your statuses. These colors inject directly into the standard WooCommerce Orders list, making it easy to see your fulfillment pipeline at a glance.
 * **Customer Dashboard Pills:** Display your custom colored status "pills" directly on the frontend in the customer's "My Account > Orders" table.
 * **Edit Core Statuses:** Safely override the colors and settings of default WooCommerce statuses.
 
-### ⚡ Unlock Automation with WLU Pro:
-Ready to scale and automate your store operations?
-Upgrading to **[WLU Workflow Pro](https://weblevelup.co.uk/plugins/custom-order-status-workflow-for-woocommerce/)** unlocks our powerful Workflow Engine:
+### ⚡ Unlock Automation with WLU Pro
+
+Ready to scale and automate your store operations? Upgrading to WLU Workflow Pro unlocks our powerful Workflow Engine:
+
 * **Workflow Automation (Rules):** Automatically send beautifully formatted emails to customers or admins the exact moment an order hits a specific status. Stop manually emailing customers!
 * **Advanced Activity Logs:** Stop guessing. Get a complete, real-time audit trail of every rule fired, every email sent, and every order affected.
 * **Conditional Logic & Routing:** Send notifications to specific vendors, warehouses, or staff based on order contents.
@@ -36,7 +37,9 @@ Upgrading to **[WLU Workflow Pro](https://weblevelup.co.uk/plugins/custom-order-
 [Get WLU Workflow Pro Today!](https://weblevelup.co.uk/plugins/custom-order-status-workflow-for-woocommerce/)
 
 ### 💻 Open Source & Source Code
+
 In compliance with WordPress.org guidelines for human-readable code, the uncompiled source code for our React UI is publicly available for review, study, and contribution.
+
 * **GitHub Repository:** [https://github.com/nikutx/wlu-custom-order-status-workflow-for-woocommerce](https://github.com/nikutx/wlu-custom-order-status-workflow-for-woocommerce)
 
 == Installation ==

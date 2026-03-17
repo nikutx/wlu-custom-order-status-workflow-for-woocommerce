@@ -6,9 +6,8 @@ import archiver from 'archiver';
 // Setup paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const pluginDir = path.resolve(__dirname, '../../');
+const pluginDir = __dirname; // FIXED: Now runs from the root directory
 
-// 1. FIXED: Pointing to the new, approved slug!
 const pluginSlug = 'wlu-custom-order-status-workflow';
 const outputZip = path.resolve(pluginDir, `${pluginSlug}.zip`);
 
@@ -27,17 +26,18 @@ archive.pipe(output);
 archive.glob('**/*', {
     cwd: pluginDir,
     ignore: [
-        'assets/admin-app/node_modules/**',
-        'assets/admin-app/zip.js',
+        'node_modules/**',             // FIXED: Root level node_modules
+        'zip.js',                      // FIXED: Root level zip script
         '**/.git/**',
         '**/.gitignore',
         '**/.idea/**',
+        '**/.idea',
         '**/.DS_Store',
         '*.zip',
-        'includes/Admin/AssetsDev.php'
+        'includes/Admin/AssetsDev.php' // Keeping your dev asset exclusion
     ]
 }, {
-    // 2. FIXED: Wraps all files inside a root folder matching your slug
+    // Wraps all files inside a root folder matching your slug
     prefix: pluginSlug
 });
 

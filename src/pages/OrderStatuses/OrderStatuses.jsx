@@ -18,8 +18,8 @@ import CancelIcon from "@mui/icons-material/Close";
 import LockIcon from "@mui/icons-material/Lock";
 import SearchIcon from "@mui/icons-material/Search";
 
-import { StatusesAPI } from "../../api/statuses";
-import { RulesAPI } from "../../api/rules"; // <--- Added for Smart Delete
+import { StatusesAPI } from "../../api/statuses.js";
+
 
 // ---------- helpers ----------
 function makeId() {
@@ -87,7 +87,6 @@ export default function OrderStatusesPage() {
     const isDark = theme.palette.mode === 'dark';
 
     const [rows, setRows] = React.useState([]);
-    const [rules, setRules] = React.useState([]);
     const [loading, setLoading] = React.useState(true);
     const [snack, setSnack] = React.useState(null);
     const [error, setError] = React.useState(null);
@@ -105,17 +104,14 @@ export default function OrderStatusesPage() {
 
     const showSnack = (severity, message) => setSnack({ severity, message });
 
+    // Delete this line: const [rules, setRules] = React.useState([]);
+
     const refresh = React.useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            // Fetch BOTH statuses and rules simultaneously
-            const [list, rulesData] = await Promise.all([
-                StatusesAPI.list(),
-                RulesAPI.list().catch(() => [])
-            ]);
-
-            setRules(rulesData);
+            // 🚨 CLEANUP: Just fetch statuses now!
+            const list = await StatusesAPI.list();
             const dbRows = (Array.isArray(list) ? list : []).map(r => normalizeRow(r));
 
             const coreRows = CORE_STATUSES.map(core => {
@@ -210,45 +206,34 @@ export default function OrderStatusesPage() {
         if (!row) return;
         setReassignTo("");
 
-        // Find orphaned rules so we can warn the user!
-        const affectedRules = rules.filter(r => {
-            const rSlug = (r.trigger_value || '').replace('wc-', '');
-            const tSlug = (row.slug || '').replace('wc-', '');
-            return rSlug === tSlug;
-        });
+        // 🚨 CLEANUP: Instantly read the rule count from the injected PHP variable!
+        const usageStats = window.WEBLEVELUP_STATUS?.proUsageStats?.rules || {};
+        const cleanSlug = (row.slug || '').replace('wc-', '');
+        const ruleCount = usageStats[cleanSlug] || 0;
 
         setDeleteDialog({
             open: true,
             targetId: id,
             count: row.count,
             label: row.label || 'this status',
-            affectedRules
+            affectedRulesCount: ruleCount // Note: Changed to a simple number!
         });
     };
-
     const performDelete = async () => {
-        const { targetId, count, affectedRules } = deleteDialog;
+        const { targetId, count } = deleteDialog;
         const countToMove = count || 0;
 
         try {
-            // 1. Delete Status & Reassign Orders on Backend
+            // 🚨 CLEANUP: We deleted the RulesAPI loop! The Pro backend PHP handles it automatically.
             let path = `statuses/${encodeURIComponent(targetId)}`;
             if (count > 0 && reassignTo) path += `?reassign=${encodeURIComponent(reassignTo)}`;
+
             const cfg = window.WEBLEVELUP_STATUS;
             await fetch(cfg.restUrl + path, { method: 'DELETE', headers: { 'X-WP-Nonce': cfg.nonce } });
 
-            // 2. Sync Orphaned Rules
-            for (const rule of affectedRules) {
-                if (reassignTo) {
-                    await RulesAPI.update(rule.id, { trigger_value: reassignTo });
-                } else {
-                    await RulesAPI.delete(rule.id);
-                }
-            }
-
+            // Update Local UI State
             setRows(prev => {
                 const remaining = prev.filter(r => r.id !== targetId);
-                // UPDATE COUNTS LOCALLY
                 if (countToMove > 0 && reassignTo) {
                     return remaining.map(row => {
                         const rowSlug = (row.slug || '').replace('wc-', '');
@@ -263,16 +248,12 @@ export default function OrderStatusesPage() {
                 return remaining;
             });
 
-            // Refresh rules silently in background
-            RulesAPI.list().then(setRules).catch(() => {});
-
             showSnack("success", "Status deleted & workflow data synced.");
-            setDeleteDialog({ open: false, targetId: null, count: 0, label: '', affectedRules: [] });
+            setDeleteDialog({ open: false, targetId: null, count: 0, label: '', affectedRulesCount: 0 });
         } catch (e) {
             showSnack("error", e?.message || "Delete failed");
         }
     };
-
     // --- RENDER HELPERS ---
     const renderRow = (row) => (
         <TableRow
@@ -481,9 +462,10 @@ export default function OrderStatusesPage() {
                 <DialogTitle>Delete Status?</DialogTitle>
                 <DialogContent>
 
-                    {deleteDialog.affectedRules.length > 0 && (
+                    {/* Change .length to > 0 */}
+                    {deleteDialog.affectedRulesCount > 0 && (
                         <DialogContentText sx={{ mb: 2, color: 'error.main', p: 1.5, bgcolor: alpha(theme.palette.error.main, 0.1), borderRadius: 1 }}>
-                            <strong>Warning:</strong> This status is currently used by <strong>{deleteDialog.affectedRules.length} automation rule(s)</strong>.
+                            <strong>Warning:</strong> This status is currently used by <strong>{deleteDialog.affectedRulesCount} automation rule(s)</strong>.
                             Reassigning orders below will also reassign the rules. Otherwise, the rules will be deleted.
                         </DialogContentText>
                     )}
