@@ -43,6 +43,7 @@ class Assets {
                    'nonce'         => wp_create_nonce('wp_rest'),
                    'adminEmail'    => get_option('admin_email'),
 
+                    'version'       => $version,
                    // 🚨 CHANGED: Using the full prefix here!
                    'proTabs'       => apply_filters('weblevelup_status_pro_tabs', []),
 

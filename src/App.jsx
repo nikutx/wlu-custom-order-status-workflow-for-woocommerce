@@ -121,7 +121,7 @@ export default function App() {
                         </Box>
                         <Box>
                             <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.2 }}>WLU Workflow</Typography>
-                            <Typography variant="caption" color="text.secondary">v0.1.0</Typography>
+                            <Typography variant="caption" color="text.secondary">v{window.WEBLEVELUP_STATUS?.version || ""}</Typography>
                         </Box>
                     </Box>
                     <Divider />

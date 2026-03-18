@@ -64,7 +64,7 @@ By default, your statuses are kept safe in your database. If you want to complet
 
 1. The beautiful React-powered Custom Status manager.
 2. Custom colored status pills in the WooCommerce Orders list.
-3. Plugin Settings and Pro License connection.
+3. Plugin Configuration and Settings.
 
 == Changelog ==
 
