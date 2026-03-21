@@ -7,12 +7,11 @@ export default defineConfig({
   base: './',
 
   server: {
-    // Change this to match your actual LocalWP site domain
     host: "dev01.local",
     port: 5174,
     strictPort: true,
     cors: {
-      origin: "http://dev01.local", // Match the protocol and domain
+      origin: "http://dev01.local",
       credentials: true,
     },
     hmr: {
@@ -23,8 +22,8 @@ export default defineConfig({
   },
 
   build: {
-    // UPDATED: Shoots the build up two levels into a root 'dist' folder!
-    outDir: path.resolve(__dirname, "../../dist"),
+    // FIXED: Drops the build exactly into the plugin root directory
+    outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
     manifest: false,
 
