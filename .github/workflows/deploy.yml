@@ -21,9 +21,13 @@ jobs:
           npm ci
           npm run build
 
+      - name: Extract Version
+        run: echo "PLUGIN_VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_ENV
+
       - name: WordPress Plugin Deploy
         uses: 10up/action-wordpress-plugin-deploy@stable
         env:
           SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
           SLUG: wlu-custom-order-status-workflow
+          VERSION: ${{ env.PLUGIN_VERSION }}
