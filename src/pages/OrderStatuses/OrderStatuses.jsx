@@ -104,7 +104,7 @@ export default function OrderStatusesPage() {
 
     const showSnack = (severity, message) => setSnack({ severity, message });
 
-    // Delete this line: const [rules, setRules] = React.useState([]);
+
 
     const refresh = React.useCallback(async () => {
         setLoading(true);

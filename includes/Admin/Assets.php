@@ -11,21 +11,29 @@ class Assets {
             return;
         }
 
-        $version = '1.0.2';
+        $version = '1.0.7';
         $url = plugin_dir_url(dirname(__FILE__, 2));
 
         // --- SMART DEV/PROD DETECTION ---
-        // Since our zip packager deletes AssetsDev.php, if it exists, we are definitely local!
-        if (file_exists(__DIR__ . '/AssetsDev.php')) {
-            require_once __DIR__ . '/AssetsDev.php';
-            \WEBLEVELUP_STATUS\Admin\AssetsDev::enqueue_vite_dev_scripts();
-        } else {
-            // Production Fallback: Load the compiled files
-            $js_url = $url . 'dist/main.js';
-            $css_url = $url . 'dist/main.css';
-            wp_enqueue_script('weblevelup-status-app', $js_url, ['wp-element', 'wp-i18n'], $version, true);
-            wp_enqueue_style('weblevelup-status-app', $css_url, [], $version);
-        }
+                // Explicitly check if we are on your local development URL
+                $is_local_env = strpos(site_url(), 'dev01.local') !== false;
+
+                // Only run Vite if we are local AND the dev file exists
+                if ($is_local_env && file_exists(__DIR__ . '/AssetsDev.php')) {
+                    require_once __DIR__ . '/AssetsDev.php';
+                    \WEBLEVELUP_STATUS\Admin\AssetsDev::enqueue_vite_dev_scripts();
+                } else {
+                   // Production Fallback: Load the compiled files safely
+                               $js_url = $url . 'dist/main.js';
+                               wp_enqueue_script('weblevelup-status-app', $js_url, ['wp-element', 'wp-i18n'], $version, true);
+
+                               // Only enqueue CSS if Vite actually generated a file
+                               $css_path = dirname(__FILE__, 3) . '/dist/main.css';
+                               $css_url = $url . 'dist/main.css';
+                               if (file_exists($css_path)) {
+                                   wp_enqueue_style('weblevelup-status-app', $css_url, [], $version);
+                               }
+                }
 
         // Full screen CSS fixes
         $css = "
