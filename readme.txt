@@ -6,7 +6,7 @@ Tested up to: 6.9
 WC requires at least: 8.0
 WC tested up to: 10.6
 Requires PHP: 7.4
-Stable tag: 1.0.7
+Stable tag: 1.0.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -67,6 +67,10 @@ By default, your statuses are kept safe in your database. If you want to complet
 3. Plugin Configuration and Settings.
 
 == Changelog ==
+
+= 1.0.8 =
+* Automated release update.
+
 
 = 1.0.7 =
 * Automated release update.

@@ -11,7 +11,7 @@ class Assets {
             return;
         }
 
-        $version = '1.0.7';
+        $version = '1.0.8';
         $url = plugin_dir_url(dirname(__FILE__, 2));
 
         // --- SMART DEV/PROD DETECTION ---
