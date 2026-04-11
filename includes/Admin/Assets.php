@@ -11,7 +11,7 @@ class Assets {
             return;
         }
 
-        $version = '1.0.9';
+        $version = '1.0.10';
 
         // FIXED: Bulletproof path math to get the exact plugin root URL and Path
         $root_dir = dirname(__FILE__, 3);
