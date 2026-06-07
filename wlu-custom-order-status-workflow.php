@@ -3,12 +3,12 @@
  * Plugin Name:       WLU Custom Order Status for WooCommerce
  * Plugin URI:        https://weblevelup.co.uk/plugins/custom-order-status-workflow-for-woocommerce/
  * Description:       Create custom WooCommerce order statuses, add beautiful status colors to your dashboard, and organize your store's fulfillment process.
- * Version: 1.0.10
+ * Version: 1.0.11
  * Author:            Web Level Up
  * Author URI:        https://weblevelup.co.uk
  * Text Domain:       wlu-custom-order-status-workflow
  * Requires at least: 6.0
- * Tested up to:      6.9
+ * Tested up to:      7.0
  * WC requires at least: 8.0
  * WC tested up to:   10.5
  * Requires PHP:      7.4

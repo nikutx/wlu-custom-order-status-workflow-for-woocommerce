@@ -2,11 +2,11 @@
 Contributors: weblevelup
 Tags: woocommerce, order status, custom order status, woocommerce workflow, order management
 Requires at least: 6.0
-Tested up to: 6.9
+Tested up to: 7.0
 WC requires at least: 8.0
 WC tested up to: 10.6
 Requires PHP: 7.4
-Stable tag: 1.0.10
+Stable tag: 1.0.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -67,6 +67,10 @@ By default, your statuses are kept safe in your database. If you want to complet
 3. Plugin Configuration and Settings.
 
 == Changelog ==
+
+= 1.0.11 =
+* Compatibility: tested up to WordPress 7.0.
+
 
 = 1.0.10 =
 * Minor update and improvement.
